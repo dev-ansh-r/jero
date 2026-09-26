@@ -1,0 +1,15 @@
+[submodule "upstream/Open_Duck_Mini"]
+	path = upstream/Open_Duck_Mini
+	url = https://github.com/apirrone/Open_Duck_Mini
+	branch = v2
+	shallow = true
+[submodule "upstream/Open_Duck_Mini_Runtime"]
+	path = upstream/Open_Duck_Mini_Runtime
+	url = https://github.com/apirrone/Open_Duck_Mini_Runtime
+	branch = v2
+	shallow = true
+[submodule "upstream/Open_Duck_Playground"]
+	path = upstream/Open_Duck_Playground
+	url = https://github.com/apirrone/Open_Duck_Playground
+	branch = main
+	shallow = true

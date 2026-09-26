@@ -1,0 +1,25 @@
+# Installed by robot/setup_pi.sh (placeholders @USER@ / @HOME@ / @REPO@ / @VENV@ are substituted).
+# Not enabled at boot by default: `sudo systemctl enable jero-walk` once walking is validated.
+[Unit]
+Description=Jero RL walk (Open Duck Mini v2 policy + Jero link)
+After=network-online.target bluetooth.target
+Wants=network-online.target
+Conflicts=open-duck-walk.service
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@REPO@
+Environment=PYTHONUNBUFFERED=1
+Environment=JERO_RUNTIME_DIR=@HOME@/Open_Duck_Mini_Runtime
+Environment=PYTHONPATH=@HOME@/Open_Duck_Mini_Runtime/mini_bdx_runtime:@HOME@/Open_Duck_Mini_Runtime
+EnvironmentFile=-/etc/default/jero-walk
+ExecStart=@VENV@/bin/python @REPO@/robot/jero_walk.py $JERO_WALK_ARGS
+Restart=on-failure
+RestartSec=3
+# SIGINT lets RLWalk run its KeyboardInterrupt cleanup (antennas, eyes, feet contacts).
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+name: test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runtime submodule only (for upstream Buttons)
+        run: git submodule update --init --depth 1 upstream/Open_Duck_Mini_Runtime
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e "jero_link[test]" numpy ruff
+      - run: ruff check .
+      - run: shellcheck robot/*.sh tools/*.sh training/*.sh
+      - run: python -m pytest -q jero_link/tests tests

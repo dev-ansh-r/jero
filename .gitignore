@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+build/
+dist/
+
+# training outputs (checkpoints/onnx live on the server; commit only a chosen policy, deliberately)
+training/runs/
+
+# secrets
+*.key
+link.key
+
+.DS_Store
