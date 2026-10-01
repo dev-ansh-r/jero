@@ -38,6 +38,21 @@ python3 scripts/imu_server.py        # laptop: python3 scripts/imu_client.py --i
 **Pass:** tilting the body forward, back and sideways moves the frame the same way. If it's mirrored,
 set `imu_upside_down` in `~/duck_config.json`. Then run `scripts/calibrate_imu.py`.
 
+### 2b. IMU: MPU6050 (GY-521) instead of BNO055
+
+The policy only reads raw gyro + accelerometer, so an MPU6050 works. Mount it **rigidly** where the
+BNO055 goes (screws or a printed clip, no foam tape), wired to the same pins (VCC to 3V3, AD0 to GND).
+
+```bash
+i2cdetect -y 1                                   # expect 68
+~/open-duck-mini-runtime/bin/python tools/imu_check.py   # guided, ~1 min, robot in your hands
+```
+
+**Pass:** `ALL PASS`. That saves the measured mounting + gyro bias to `~/.config/jero/imu.json`.
+From then on run the walk with `--imu mpu6050` (or `JERO_IMU=mpu6050` in `/etc/default/jero-walk`).
+Re-run the check whenever the IMU is unscrewed. At every start, hold the robot still for 2 s:
+the gyro bias is re-measured (falls back to the saved one if it moved).
+
 ## 3. Motors
 
 ```bash

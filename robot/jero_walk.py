@@ -6,6 +6,7 @@ commands come from: Xbox pad (priority) + Jero link over Wi-Fi (Jetson / laptop)
 
     python robot/jero_walk.py                       # Xbox + link, signed with ~/.config/jero/link.key
     python robot/jero_walk.py --no-xbox             # link only (keep a laptop ready with tools/estop)
+    python robot/jero_walk.py --imu mpu6050         # GY-521 instead of BNO055 (run tools/imu_check.py first)
 """
 
 from __future__ import annotations
@@ -46,12 +47,30 @@ def resolve_policy(explicit: str | None) -> Path:
     sys.exit("policy .onnx not found: pass --onnx_model_path (see tools/fetch_policy.sh)")
 
 
+def install_mpu6050(log) -> None:
+    """Make upstream's ``from mini_bdx_runtime.raw_imu import Imu`` load our MPU6050 driver."""
+    import imu_mpu6050
+
+    cfg = imu_mpu6050.load_config()
+    if not imu_mpu6050.CONFIG_PATH.is_file():
+        sys.exit(f"{imu_mpu6050.CONFIG_PATH} missing: run tools/imu_check.py once (measures the mounting)")
+    imu_mpu6050.parse_axes(cfg["axes"])  # fail early on a bad file
+    sys.modules["mini_bdx_runtime.raw_imu"] = imu_mpu6050
+    log.info("IMU: MPU6050 axes=%s (keep the robot still for 2 s at start: gyro bias)", cfg["axes"])
+
+
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--onnx_model_path", default=None)
     p.add_argument("--duck_config_path", default=str(HOME / "duck_config.json"))
     p.add_argument("--runtime-dir", default=None)
     p.add_argument("--serial-port", default="/dev/ttyACM0")
+    p.add_argument(
+        "--imu",
+        choices=("bno055", "mpu6050"),
+        default=os.environ.get("JERO_IMU", "bno055"),
+        help="bno055 = upstream driver; mpu6050 = robot/imu_mpu6050.py (env JERO_IMU)",
+    )
     # upstream knobs, same defaults as v2_rl_walk_mujoco.py
     p.add_argument("-a", "--action_scale", type=float, default=0.25)
     p.add_argument("-p", type=int, default=30)
@@ -89,6 +108,9 @@ def main():
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     # upstream loads ./polynomial_coefficients.pkl and ../mini_bdx_runtime/assets relative to scripts/
     os.chdir(runtime / "scripts")
+
+    if args.imu == "mpu6050":
+        install_mpu6050(log)
 
     from jero_controller import MuxController  # noqa: E402  (needs mini_bdx_runtime on path)
     from v2_rl_walk_mujoco import RLWalk  # noqa: E402

@@ -28,6 +28,7 @@ The servos are daisy-chained. The adapter connects to the Pi over USB (micro-USB
 | Signal | Pin | GPIO |
 |---|---|---|
 | BNO055 VIN / GND / SDA / SCL | 1 / 9 / 3 / 5 | 3V3 / GND / GPIO2 / GPIO3 |
+| *or* MPU6050 (GY-521) VCC / GND / SDA / SCL, AD0 to GND (addr 0x68) | 1 / 9 / 3 / 5 | 3V3 / GND / GPIO2 / GPIO3 |
 | Left foot switch / Right foot switch / GND | 15 / 13 / 9 | GPIO22 / GPIO27 / GND |
 | Left eye + / Right eye + / Projector + / common − | 16 / 18 / 22 / 6 | GPIO23 / 24 / 25 / GND |
 | Antenna L PWM / R PWM / 5 V / GND | 32 / 33 / 2 / 6 | GPIO12 / GPIO13 |

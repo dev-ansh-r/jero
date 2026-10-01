@@ -36,6 +36,7 @@ echo "venv:    $VENV"
 
 step "Installing jero_link into the runtime venv"
 "$VENV/bin/pip" install --quiet -e "$REPO/jero_link"
+"$VENV/bin/pip" install --quiet smbus2   # MPU6050 driver (robot/imu_mpu6050.py)
 "$VENV/bin/python" -c "import jero_link; print('jero_link', jero_link.__version__)"
 
 step "Link key"
