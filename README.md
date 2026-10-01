@@ -13,7 +13,7 @@ Wi-Fi command link, so a Jetson Orin Nano Super can act as the robot's off-board
   follow-me)                  robot/jero_walk.py
 ```
 
-See [docs/architecture.md](docs/architecture.md) for the design decisions.
+See [docs/architecture.md](docs/architecture.md) for the design decisions and [docs/architecture/](docs/architecture/README.md) for the diagrams.
 
 ## Status
 

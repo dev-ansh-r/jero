@@ -1,5 +1,7 @@
 # Architecture
 
+Diagrams, interface contracts and decisions D8 onwards are in [`architecture/README.md`](architecture/README.md).
+
 ## Decisions
 
 | # | Decision | Why |
