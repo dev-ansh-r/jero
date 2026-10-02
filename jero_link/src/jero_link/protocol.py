@@ -19,7 +19,6 @@ import json
 import math
 import time
 from dataclasses import dataclass, field, replace
-from typing import Optional, Tuple
 
 MAGIC = b"JR1"
 VERSION = 1
@@ -49,7 +48,7 @@ class ProtocolError(ValueError):
 
 
 def _clamp(value: float, lo: float, hi: float) -> float:
-    return lo if value < lo else hi if value > hi else value
+    return lo if value < lo else min(value, hi)
 
 
 @dataclass(frozen=True)
@@ -61,13 +60,13 @@ class Command:
     head_pitch: float = 0.0
     head_yaw: float = 0.0
     head_roll: float = 0.0
-    buttons: Tuple[str, ...] = field(default_factory=tuple)
+    buttons: tuple[str, ...] = field(default_factory=tuple)
     left_trigger: float = 0.0
     right_trigger: float = 0.0
     estop: bool = False
     ttl_ms: int = 500
 
-    def clamped(self) -> "Command":
+    def clamped(self) -> Command:
         axes = {name: _clamp(getattr(self, name), *LIMITS[name]) for name in AXES}
         return replace(
             self,
@@ -94,7 +93,7 @@ def encode(
     command: Command,
     seq: int,
     session: str,
-    key: Optional[bytes] = None,
+    key: bytes | None = None,
 ) -> bytes:
     cmd = command.clamped()
     body = json.dumps(
@@ -131,7 +130,7 @@ def _finite(value, name: str) -> float:
     return value
 
 
-def decode(frame: bytes, key: Optional[bytes] = None) -> Message:
+def decode(frame: bytes, key: bytes | None = None) -> Message:
     """Parse and validate a frame. With ``key`` set, unsigned or badly signed frames are rejected."""
     if len(frame) > MAX_DATAGRAM:
         raise ProtocolError("frame too large")
@@ -195,7 +194,7 @@ def decode(frame: bytes, key: Optional[bytes] = None) -> Message:
     )
 
 
-def load_key(path: Optional[str]) -> Optional[bytes]:
+def load_key(path: str | None) -> bytes | None:
     """Read a hex key file written by tools/gen_link_key.sh. ``None`` -> unsigned mode."""
     if not path:
         return None

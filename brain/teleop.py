@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "jero_link" / "src"))
 
-from jero_link import LIMITS, JeroClient, load_key  # noqa: E402
+from jero_link import LIMITS, JeroClient, load_key
 
 STEP = {"vx": 0.05, "vy": 0.05, "wz": 0.25, "head": 0.1}
 
@@ -38,7 +38,7 @@ def main():
     args = p.parse_args()
 
     key = None if args.key.lower() == "none" else load_key(args.key)
-    state = dict(vx=0.0, vy=0.0, wz=0.0, head_pitch=0.0, head_yaw=0.0)
+    state = {"vx": 0.0, "vy": 0.0, "wz": 0.0, "head_pitch": 0.0, "head_yaw": 0.0}
 
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)

@@ -3,15 +3,16 @@ import math
 import time
 
 import pytest
-
-from jero_link import BUTTONS, Command, JeroClient, ProtocolError, Receiver, UdpReceiver, decode, encode
 from jero_link.protocol import MAGIC, load_key
 from jero_link.receiver import BUTTON_HOLD_S
 
+from jero_link import BUTTONS, Command, JeroClient, ProtocolError, Receiver, UdpReceiver, decode, encode
+
 KEY = bytes.fromhex("11" * 32)
+ZERO = Command()
 
 
-def frame(cmd=Command(), seq=1, session="s1", key=KEY):
+def frame(cmd=ZERO, seq=1, session="s1", key=KEY):
     return encode(cmd, seq=seq, session=session, key=key)
 
 

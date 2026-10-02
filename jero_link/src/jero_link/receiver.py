@@ -6,8 +6,8 @@ import logging
 import socket
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Optional
 
 from .protocol import BUTTONS, DEFAULT_PORT, MAX_DATAGRAM, Command, Message, ProtocolError, decode
 
@@ -24,12 +24,12 @@ class LinkState:
     received_at: float
     session: str
     seq: int
-    pressed_until: Dict[str, float] = field(default_factory=dict)
+    pressed_until: dict[str, float] = field(default_factory=dict)
 
     def fresh(self, now: float) -> bool:
         return (now - self.received_at) * 1000.0 <= self.command.ttl_ms
 
-    def pressed(self, now: float) -> Dict[str, bool]:
+    def pressed(self, now: float) -> dict[str, bool]:
         return {b: self.pressed_until.get(b, 0.0) > now for b in BUTTONS}
 
 
@@ -41,15 +41,15 @@ class Receiver:
 
     def __init__(
         self,
-        key: Optional[bytes] = None,
-        on_estop: Optional[Callable[[], None]] = None,
+        key: bytes | None = None,
+        on_estop: Callable[[], None] | None = None,
         clock: Callable[[], float] = time.monotonic,
     ):
         self.key = key
         self.on_estop = on_estop
         self.clock = clock
         self._lock = threading.Lock()
-        self._state: Optional[LinkState] = None
+        self._state: LinkState | None = None
         self.dropped = 0
         self.accepted = 0
 

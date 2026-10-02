@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "jero_link" / "src"))
 
-from jero_link import JeroClient, load_key  # noqa: E402
+from jero_link import JeroClient, load_key
 
 
 def main():

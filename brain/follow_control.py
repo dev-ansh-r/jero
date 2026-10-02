@@ -5,11 +5,10 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "jero_link" / "src"))
 
-from jero_link import LIMITS  # noqa: E402
+from jero_link import LIMITS
 
 
 @dataclass
@@ -31,10 +30,10 @@ class FollowConfig:
 
 
 class FollowController:
-    def __init__(self, cfg: Optional[FollowConfig] = None):
+    def __init__(self, cfg: FollowConfig | None = None):
         self.cfg = cfg or FollowConfig()
 
-    def update(self, target: Optional[Target]) -> Tuple[float, float]:
+    def update(self, target: Target | None) -> tuple[float, float]:
         """Returns (vx, wz)."""
         c = self.cfg
         if target is None:

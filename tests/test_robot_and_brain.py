@@ -18,10 +18,11 @@ sys.path.insert(0, str(ROOT / "upstream" / "Open_Duck_Mini_Runtime" / "mini_bdx_
 
 pytest.importorskip("mini_bdx_runtime.buttons", reason="git submodule update --init upstream/Open_Duck_Mini_Runtime")
 
-from follow_control import FollowController, Target  # noqa: E402
-from jero_controller import MuxController  # noqa: E402
-from jero_link import Command, Receiver, encode  # noqa: E402
-from mini_bdx_runtime.buttons import Buttons  # noqa: E402
+from follow_control import FollowController, Target
+from jero_controller import MuxController
+from mini_bdx_runtime.buttons import Buttons
+
+from jero_link import Command, Receiver, encode
 
 KEY = bytes.fromhex("33" * 32)
 
@@ -32,7 +33,7 @@ class FakeXbox:
     def __init__(self):
         self.cmds = [0.0] * 7
         self.buttons = Buttons()
-        self.raw = dict(A=False, B=False, X=False, Y=False, LB=False, RB=False, up=False, down=False)
+        self.raw = dict.fromkeys(("A", "B", "X", "Y", "LB", "RB", "up", "down"), False)
         self.lt = self.rt = 0.0
 
     def get_last_command(self):

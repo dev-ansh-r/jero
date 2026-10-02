@@ -112,8 +112,8 @@ def main():
     if args.imu == "mpu6050":
         install_mpu6050(log)
 
-    from jero_controller import MuxController  # noqa: E402  (needs mini_bdx_runtime on path)
-    from v2_rl_walk_mujoco import RLWalk  # noqa: E402
+    from jero_controller import MuxController
+    from v2_rl_walk_mujoco import RLWalk
 
     link = None
     if not args.no_link:
@@ -133,7 +133,7 @@ def main():
 
         try:
             xbox = XBoxController(20)
-        except Exception as exc:  # pygame raises if no joystick is connected
+        except Exception as exc:  # noqa: BLE001  pygame raises if no joystick is connected
             if link is None:
                 sys.exit(f"No Xbox pad ({exc}) and link disabled: nothing can command the robot")
             log.warning("No Xbox pad (%s): link-only mode", exc)

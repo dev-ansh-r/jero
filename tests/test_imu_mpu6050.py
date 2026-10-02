@@ -13,7 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "robot"))
 
-import imu_mpu6050 as m  # noqa: E402
+import imu_mpu6050 as m
 
 G = m.G
 
@@ -53,7 +53,7 @@ class FakeBus:
         g = (self.R @ self.gyro_robot + self.bias) * 180 / math.pi * m.GYRO_LSB_PER_DPS
         out = []
         for v in [*a, 0.0, *g]:
-            iv = int(round(v)) & 0xFFFF
+            iv = int(round(v)) & 0xFFFF  # noqa: RUF046  (v can be a numpy float)
             out += [iv >> 8, iv & 0xFF]
         return out
 

@@ -7,7 +7,6 @@ import secrets
 import socket
 import threading
 from dataclasses import replace
-from typing import Optional
 
 from .protocol import BUTTONS, DEFAULT_PORT, Command, encode
 
@@ -30,7 +29,7 @@ class JeroClient:
         self,
         host: str,
         port: int = DEFAULT_PORT,
-        key: Optional[bytes] = None,
+        key: bytes | None = None,
         rate_hz: float = 20.0,
         ttl_ms: int = 500,
     ):
@@ -49,7 +48,7 @@ class JeroClient:
         self._lock = threading.Lock()
         self._wake = threading.Event()
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     # -- command setters -------------------------------------------------
@@ -60,9 +59,12 @@ class JeroClient:
     def head(self, neck_pitch=None, head_pitch=None, head_yaw=None, head_roll=None) -> None:
         updates = {
             k: v
-            for k, v in dict(
-                neck_pitch=neck_pitch, head_pitch=head_pitch, head_yaw=head_yaw, head_roll=head_roll
-            ).items()
+            for k, v in {
+                "neck_pitch": neck_pitch,
+                "head_pitch": head_pitch,
+                "head_yaw": head_yaw,
+                "head_roll": head_roll,
+            }.items()
             if v is not None
         }
         with self._lock:
@@ -118,7 +120,7 @@ class JeroClient:
             self._wake.wait(self.period)
             self._wake.clear()
 
-    def start(self) -> "JeroClient":
+    def start(self) -> JeroClient:
         if not self._running:
             self._running = True
             self._thread = threading.Thread(target=self._loop, name="jero-link-tx", daemon=True)
@@ -135,7 +137,7 @@ class JeroClient:
                 self._thread.join(timeout=1.0)
         self.sock.close()
 
-    def __enter__(self) -> "JeroClient":
+    def __enter__(self) -> JeroClient:  # noqa: PYI034  (typing.Self needs 3.11)
         return self.start()
 
     def __exit__(self, *exc) -> None:

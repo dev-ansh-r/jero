@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "jero_link" / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from follow_control import FollowController  # noqa: E402
+from follow_control import FollowController
 
 
 def main():
@@ -33,7 +33,6 @@ def main():
     args = p.parse_args()
 
     import cv2  # JetPack ships OpenCV; on a laptop: pip install opencv-python
-
     from detectors import make_detector
 
     src = int(args.camera) if args.camera.isdigit() else args.camera

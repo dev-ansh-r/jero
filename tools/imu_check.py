@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "robot"))
-import imu_mpu6050 as m  # noqa: E402
+import imu_mpu6050 as m
 
 RATE = 100.0
 

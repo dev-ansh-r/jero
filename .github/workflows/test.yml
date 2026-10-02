@@ -10,7 +10,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -e "jero_link[test]" numpy ruff
+      - run: pip install -e "jero_link[test]" numpy ruff==0.16.10
       - run: ruff check .
       - run: shellcheck robot/*.sh tools/*.sh training/*.sh
       - run: python -m pytest -q jero_link/tests tests
