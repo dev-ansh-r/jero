@@ -3,7 +3,7 @@
 
 Run on the Pi with the IMU fitted in the trunk and the robot in your hands (servos off):
 
-    ~/open-duck-mini-runtime/bin/python tools/imu_check.py
+    python ~/Jero/tools/imu_check.py
 
 Steps (about 1 minute):
   1. hold upright and still        -> finds robot +z (gravity) and the gyro bias
