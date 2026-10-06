@@ -7,6 +7,7 @@ commands come from: Xbox pad (priority) + Jero link over Wi-Fi (Jetson / laptop)
     python robot/jero_walk.py                       # Xbox + link, signed with ~/.config/jero/link.key
     python robot/jero_walk.py --no-xbox             # link only (keep a laptop ready with tools/estop)
     python robot/jero_walk.py --imu mpu6050         # GY-521 instead of BNO055 (run tools/imu_check.py first)
+    python robot/jero_walk.py --missing-servos 30,31,32,33   # bench: head chain not wired (stand only)
 """
 
 from __future__ import annotations
@@ -85,6 +86,12 @@ def parse_args():
     p.add_argument("--link-port", type=int, default=5005)
     p.add_argument("--link-bind", default="0.0.0.0")
     p.add_argument("--link-key", default=str(DEFAULT_KEY), help="hex key file; 'none' = unsigned (bench only)")
+    p.add_argument(
+        "--missing-servos",
+        default="",
+        metavar="IDS",
+        help="bench only: comma-separated servo IDs that aren't connected, e.g. 30,31,32,33 (head chain)",
+    )
     p.add_argument("-v", "--verbose", action="store_true")
     return p.parse_args()
 
@@ -111,6 +118,11 @@ def main():
 
     if args.imu == "mpu6050":
         install_mpu6050(log)
+
+    if args.missing_servos:
+        import missing_servos
+
+        missing_servos.install(missing_servos.parse_ids(args.missing_servos))
 
     from jero_controller import MuxController
     from v2_rl_walk_mujoco import RLWalk
