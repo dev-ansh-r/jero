@@ -8,6 +8,7 @@ commands come from: Xbox pad (priority) + Jero link over Wi-Fi (Jetson / laptop)
     python robot/jero_walk.py --no-xbox             # link only (keep a laptop ready with tools/estop)
     python robot/jero_walk.py --imu mpu6050         # GY-521 instead of BNO055 (run tools/imu_check.py first)
     python robot/jero_walk.py --missing-servos 30,31,32,33   # bench: head chain not wired (stand only)
+    python robot/jero_walk.py --pad ps4             # DualShock 4 (auto-detected by name otherwise)
 """
 
 from __future__ import annotations
@@ -81,7 +82,8 @@ def parse_args():
     p.add_argument("--pitch_bias", type=float, default=0, help="deg")
     p.add_argument("--cutoff_frequency", type=float, default=None)
     # Jero
-    p.add_argument("--no-xbox", action="store_true", help="don't require a paired Xbox pad")
+    p.add_argument("--no-xbox", action="store_true", help="don't require a paired gamepad")
+    p.add_argument("--pad", choices=("auto", "xbox", "ps4"), default="auto", help="gamepad layout (auto: by name)")
     p.add_argument("--no-link", action="store_true", help="disable the Wi-Fi command link")
     p.add_argument("--link-port", type=int, default=5005)
     p.add_argument("--link-bind", default="0.0.0.0")
@@ -141,14 +143,14 @@ def main():
 
     xbox = None
     if not args.no_xbox:
-        from mini_bdx_runtime.xbox_controller import XBoxController
+        import pads
 
         try:
-            xbox = XBoxController(20)
+            xbox = pads.make_controller(20, args.pad)
         except Exception as exc:  # noqa: BLE001  pygame raises if no joystick is connected
             if link is None:
-                sys.exit(f"No Xbox pad ({exc}) and link disabled: nothing can command the robot")
-            log.warning("No Xbox pad (%s): link-only mode", exc)
+                sys.exit(f"No gamepad ({exc}) and link disabled: nothing can command the robot")
+            log.warning("No gamepad (%s): link-only mode", exc)
 
     log.info("runtime=%s policy=%s config=%s", runtime, policy, duck_config)
     rl = RLWalk(
