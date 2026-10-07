@@ -38,9 +38,21 @@ cd firmware/pico_bridge
 pio run                     # -> .pio/build/pico/firmware.uf2
 ```
 
-Hold BOOTSEL while plugging the Pico into USB, then copy `firmware.uf2` to the `RPI-RP2` drive.
-From the Pi you can also put it in bootloader mode by opening the port at 1200 baud
-(so never open `/dev/ttyACM0` at 1200 baud by accident).
+**From the Pi, nothing unplugged** (walk stopped):
+
+```powershell
+scp firmware\pico_bridge\.piouild\picoirmware.uf2 jero@jero.local:      # on the laptop
+```
+```bash
+~/Jero/tools/flash_pico.sh ~/firmware.uf2                                     # on the Pi
+```
+
+It reboots the Pico into its bootloader with a 1200 baud "touch" on `/dev/ttyACM0` (so never open
+that port at 1200 baud by accident), copies the file onto the `RPI-RP2` drive and waits for the port
+to come back.
+
+**From a laptop:** hold BOOTSEL while plugging the Pico into USB, then copy `firmware.uf2` to the
+`RPI-RP2` drive. Use this if the Pico doesn't answer the 1200 baud touch (e.g. a crashed firmware).
 
 ## LED
 
