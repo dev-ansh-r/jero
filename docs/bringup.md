@@ -85,11 +85,21 @@ the gyro bias is re-measured (falls back to the saved one if it moved).
 
 ## 3. Motors
 
+Without the Waveshare adapter, the servo bus runs through a Raspberry Pi Pico flashed with
+[firmware/pico_bridge](../firmware/pico_bridge/README.md); it appears as the same `/dev/ttyACM0`.
+First check the bus itself (reads only, nothing moves):
+
 ```bash
-python3 scripts/check_voltage.py && python3 scripts/check_motors.py
+python ~/Jero/tools/bus_test.py           # --ids 10,11,12,13,14,20,21,22,23,24 if the head isn't wired
 ```
 
-**Pass:** all 14 IDs respond and the bus voltage reads 7.4–8.4 V.
+**Pass:** `PASS` (0 errors over 300 rounds, a missing ID fails fast and the next read works). Then:
+
+```bash
+cd ~/Open_Duck_Mini_Runtime && python3 scripts/check_voltage.py && python3 scripts/check_motors.py
+```
+
+**Pass:** all 14 IDs respond and the bus voltage reads 7.4–8.4 V (2S) or 11.1–12.6 V (3S).
 
 ## 4. Joint offsets
 

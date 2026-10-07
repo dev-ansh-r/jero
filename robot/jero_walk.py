@@ -121,6 +121,9 @@ def main():
     if args.imu == "mpu6050":
         install_mpu6050(log)
 
+    import bus_guard
+
+    bus_guard.install()  # a bus panic skips one step instead of killing the walk
     if args.missing_servos:
         import missing_servos
 

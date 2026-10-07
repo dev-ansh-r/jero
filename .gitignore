@@ -15,3 +15,6 @@ training/runs/
 link.key
 
 .DS_Store
+
+# PlatformIO build output
+.pio/
