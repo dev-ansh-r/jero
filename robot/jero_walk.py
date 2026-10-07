@@ -68,6 +68,12 @@ def parse_args():
     p.add_argument("--runtime-dir", default=None)
     p.add_argument("--serial-port", default="/dev/ttyACM0")
     p.add_argument(
+        "--bus",
+        choices=("jero", "rustypot"),
+        default=os.environ.get("JERO_BUS", "jero"),
+        help="servo IO: jero = robot/feetech_io.py (25 ms timeout), rustypot = upstream (1 s timeout)",
+    )
+    p.add_argument(
         "--imu",
         choices=("bno055", "mpu6050"),
         default=os.environ.get("JERO_IMU", "bno055"),
@@ -121,9 +127,14 @@ def main():
     if args.imu == "mpu6050":
         install_mpu6050(log)
 
-    import bus_guard
+    if args.bus == "jero":
+        import feetech_io
 
-    bus_guard.install()  # a bus panic skips one step instead of killing the walk
+        feetech_io.install()  # short timeout: a lost reply skips one step instead of freezing 1 s
+    else:
+        import bus_guard
+
+        bus_guard.install()  # rustypot: a bus panic skips one step instead of killing the walk
     if args.missing_servos:
         import missing_servos
 
