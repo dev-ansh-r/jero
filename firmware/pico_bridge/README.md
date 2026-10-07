@@ -41,7 +41,7 @@ pio run                     # -> .pio/build/pico/firmware.uf2
 **From the Pi, nothing unplugged** (walk stopped):
 
 ```powershell
-scp firmware\pico_bridge\.piouild\picoirmware.uf2 jero@jero.local:      # on the laptop
+scp firmware\pico_bridge\.pio\build\pico\firmware.uf2 jero@jero.local:      # on the laptop
 ```
 ```bash
 ~/Jero/tools/flash_pico.sh ~/firmware.uf2                                     # on the Pi
@@ -59,7 +59,8 @@ to come back.
 | LED | Meaning |
 |---|---|
 | short flicker | bus traffic |
-| fast blink for 1 s | a transaction failed (missing or corrupt reply, error marker sent) |
+| fast blink for 1 s | a servo reply was missing or corrupt (error marker sent) |
+| slow blink for 1.2 s | a packet from the Pi arrived damaged or stopped half way (error marker sent) |
 
 ## Check it on the Pi
 
