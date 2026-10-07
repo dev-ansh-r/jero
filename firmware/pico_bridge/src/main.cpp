@@ -31,6 +31,7 @@ static const uint32_t BUS_BAUD = 1000000;
 
 static const uint8_t BROADCAST_ID = 0xFE;
 static const uint8_t INST_SYNC_READ = 0x82;
+static const uint8_t INST_BRIDGE_STATS = 0xF0;   // broadcast only; answered by the bridge, never sent to servos
 static const int MAX_PACKET = 260;   // 4-byte header + LEN (max 255) + 1
 static const int MAX_REPLIES = 32;
 
@@ -70,35 +71,47 @@ static uint8_t checksum(const uint8_t *p, int n)   // over ID..last param
     return (uint8_t)~s;
 }
 
+// ---- counters (read with tools/bridge_stats.py) ----------------------------------------------
+struct Stats
+{
+    uint32_t requests;      // complete, valid instruction packets from the host
+    uint32_t badChecksum;   // complete packets from the host with a wrong checksum (answered with a marker)
+    uint32_t stalled;       // host packets that stopped half way (answered with a marker)
+    uint32_t junkBytes;     // host bytes outside any packet
+    uint32_t replyErrors;   // bus transactions with a missing or corrupt servo reply (marker sent)
+    uint32_t okBatches;     // bus transactions answered in full
+    uint32_t usbShort;      // USB writes that didn't take every byte
+};
+static Stats stats = {};
+
 // ---- host -> bridge: assemble one instruction packet ----------------------------------------
 static uint8_t inPkt[MAX_PACKET];
 static int inLen = 0;
 static uint32_t inLastByte = 0;
 
-// Feed one USB byte. Returns true when inPkt holds a complete packet with a valid checksum.
-static bool feedHostByte(uint8_t b)
+enum HostResult { HOST_NONE, HOST_PACKET, HOST_BAD };
+
+// Feed one USB byte. HOST_PACKET when inPkt holds a complete packet with a valid checksum.
+static HostResult feedHostByte(uint8_t b)
 {
-    if (inLen > 0 && micros() - inLastByte > HOST_STALL_US) inLen = 0;   // stale fragment
     inLastByte = micros();
 
     if (inLen < 2)
     {
         if (b == 0xFF) inPkt[inLen++] = b;
-        else inLen = 0;
-        return false;
+        else { inLen = 0; stats.junkBytes++; }
+        return HOST_NONE;
     }
-    if (inLen == 2 && b == 0xFF) return false;   // FF FF FF: stay aligned on the last two
+    if (inLen == 2 && b == 0xFF) return HOST_NONE;   // FF FF FF: stay aligned on the last two
     inPkt[inLen++] = b;
-    if (inLen < 4) return false;
+    if (inLen < 4) return HOST_NONE;
 
     int len = inPkt[3];
-    if (len < 2) { inLen = 0; return false; }
-    if (inLen < 4 + len) return false;
+    if (len < 2) { inLen = 0; return HOST_BAD; }
+    if (inLen < 4 + len) return HOST_NONE;
 
-    bool ok = inPkt[3 + len] == checksum(&inPkt[2], len + 1);
-    int total = inLen;
     inLen = 0;
-    return ok && total == 4 + len;
+    return inPkt[3 + len] == checksum(&inPkt[2], len + 1) ? HOST_PACKET : HOST_BAD;
 }
 
 // ---- one bus transaction ---------------------------------------------------------------------
@@ -133,8 +146,14 @@ static Expect expectedReplies(const uint8_t *pkt)
 static uint8_t replies[MAX_REPLIES][MAX_PACKET];
 static int replyLens[MAX_REPLIES];
 static uint8_t rx[MAX_REPLIES * 40 + MAX_PACKET];
-static uint32_t errorCount = 0;
-static uint32_t lastErrorMs = 0, lastActivityMs = 0;
+static uint32_t lastReplyErrorMs = 0, lastHostErrorMs = 0, lastActivityMs = 0;
+static bool anyReplyError = false, anyHostError = false;
+
+static void usbWrite(const uint8_t *buf, size_t n)
+{
+    if (Serial.write(buf, n) < n) stats.usbShort++;
+    Serial.flush();
+}
 
 static void sendErrorMarker(const Expect &e)
 {
@@ -148,10 +167,29 @@ static void sendErrorMarker(const Expect &e)
     }
     uint8_t m[6] = {0xFF, 0xFF, mid, 0x02, 0x00, 0};
     m[5] = checksum(&m[2], 3);
-    Serial.write(m, sizeof(m));
-    Serial.flush();
-    errorCount++;
-    lastErrorMs = millis();
+    usbWrite(m, sizeof(m));
+}
+
+// The host sent something we can't act on (bad checksum, or it stopped half way). It is very
+// likely waiting for an answer: fail it now instead of letting it time out after 1 s.
+static void hostError()
+{
+    Expect none;
+    sendErrorMarker(none);
+    anyHostError = true;
+    lastHostErrorMs = millis();
+}
+
+static void sendStats()
+{
+    const uint32_t v[] = {stats.requests, stats.badChecksum, stats.stalled, stats.junkBytes,
+                          stats.replyErrors, stats.okBatches, stats.usbShort};
+    const int n = sizeof(v);
+    uint8_t m[6 + n];
+    m[0] = 0xFF; m[1] = 0xFF; m[2] = BROADCAST_ID; m[3] = n + 2; m[4] = 0x00;
+    memcpy(&m[5], v, n);   // little-endian uint32s, in Stats order
+    m[5 + n] = checksum(&m[2], n + 3);
+    usbWrite(m, sizeof(m));
 }
 
 static void transact(const uint8_t *pkt, int n)
@@ -223,6 +261,9 @@ static void transact(const uint8_t *pkt, int n)
     if (have < e.count)
     {
         sendErrorMarker(e);
+        stats.replyErrors++;
+        anyReplyError = true;
+        lastReplyErrorMs = millis();
         return;
     }
     static uint8_t out[MAX_REPLIES * MAX_PACKET];
@@ -232,8 +273,8 @@ static void transact(const uint8_t *pkt, int n)
         memcpy(&out[outLen], replies[i], replyLens[i]);
         outLen += replyLens[i];
     }
-    Serial.write(out, outLen);   // the whole answer at once: nothing trickles in later
-    Serial.flush();
+    usbWrite(out, outLen);   // the whole answer at once: nothing trickles in later
+    stats.okBatches++;
 }
 
 // ---- Arduino ---------------------------------------------------------------------------------
@@ -252,13 +293,32 @@ void loop()
 {
     while (Serial.available())
     {
-        if (feedHostByte((uint8_t)Serial.read())) transact(inPkt, 4 + inPkt[3]);
+        HostResult r = feedHostByte((uint8_t)Serial.read());
+        if (r == HOST_PACKET)
+        {
+            stats.requests++;
+            if (inPkt[2] == BROADCAST_ID && inPkt[4] == INST_BRIDGE_STATS) sendStats();
+            else transact(inPkt, 4 + inPkt[3]);
+        }
+        else if (r == HOST_BAD)
+        {
+            stats.badChecksum++;
+            hostError();
+        }
+    }
+    if (inLen > 0 && micros() - inLastByte > HOST_STALL_US)
+    {
+        inLen = 0;   // a packet that stopped half way
+        stats.stalled++;
+        hostError();
     }
 
-    // LED: fast blink for 1 s after an error, short flicker on traffic, otherwise off.
+    // LED: slow blink for 1.2 s after a bad/stalled host packet, fast blink for 1 s after a
+    // servo reply error, short flicker on traffic, otherwise off.
     uint32_t now = millis();
     bool led;
-    if (errorCount && now - lastErrorMs < 1000) led = (now / 60) % 2;
+    if (anyHostError && now - lastHostErrorMs < 1200) led = ((now - lastHostErrorMs) / 300) % 2 == 0;
+    else if (anyReplyError && now - lastReplyErrorMs < 1000) led = (now / 60) % 2;
     else led = now - lastActivityMs < 30;
     digitalWrite(LED_BUILTIN, led);
 }
