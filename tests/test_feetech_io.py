@@ -145,6 +145,7 @@ def test_upstream_hwi_uses_it_and_skips_a_lost_read(monkeypatch, bridge):
     except ImportError as exc:
         pytest.skip(f"upstream runtime not available: {exc}")
     monkeypatch.setattr(fio, "SerialTransport", lambda port: bridge)
+    monkeypatch.setattr(fio, "resolve_port", lambda port: port)
 
     fio.install()
     joints = [
@@ -162,3 +163,54 @@ def test_upstream_hwi_uses_it_and_skips_a_lost_read(monkeypatch, bridge):
     assert hwi.get_present_positions() is None  # walk loop: obs None -> skip this step
     assert time.monotonic() - t0 < 0.15
     assert len(hwi.get_present_velocities()) == 14
+
+
+def test_port_lost_then_reopened(bridge):
+    """The Pico reboots (watchdog): the tty vanishes, reads fail fast, then the IO reopens itself."""
+
+    class Vanishing(FakeBridge):
+        gone = False
+
+        def write(self, data):
+            if self.gone:
+                raise fio.PortLost("bus bridge port lost: [Errno 5] Input/output error")
+            super().write(data)
+
+        def read(self, timeout):
+            if self.gone:
+                raise fio.PortLost("bus bridge port lost: end of file (device gone)")
+            return super().read(timeout)
+
+        def close(self):
+            pass
+
+    first = Vanishing()
+    reopened = []
+
+    def reopen():
+        new = Vanishing()
+        reopened.append(new)
+        return new
+
+    io = fio.FeetechIO(first, timeout_s=0.025, quiet_after_error_s=0.01, reopen=reopen)
+    io.read_present_position(IDS)
+    first.gone = True
+    with pytest.raises(fio.BusError, match="port lost"):
+        io.read_present_position(IDS)
+    assert io.t is None  # closed right away, so the device can come back under the same name
+    assert len(io.read_present_position(IDS)) == len(IDS)  # reopened on the next call
+    assert len(reopened) == 1
+
+
+def test_reopen_is_rate_limited_while_the_pico_is_away():
+    calls = []
+
+    def reopen():
+        calls.append(1)
+        raise FileNotFoundError("/dev/ttyACM0 not found and no Pico on USB")
+
+    io = fio.FeetechIO(None, reopen=reopen)
+    for _ in range(5):
+        with pytest.raises(fio.BusError):
+            io.read_present_position(IDS)
+    assert len(calls) == 1  # at most one attempt per 0.2 s, each failing read stays fast

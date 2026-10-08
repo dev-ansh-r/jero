@@ -27,6 +27,7 @@ FIELDS = (
     ("replyErrors", "servo reply missing/corrupt -> marker sent"),
     ("okBatches", "transactions answered in full"),
     ("usbShort", "USB writes that lost bytes"),
+    ("watchdogResets", "times the Pico rebooted itself because its loop got stuck (since power-on)"),
 )
 
 

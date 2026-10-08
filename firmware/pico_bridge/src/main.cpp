@@ -23,6 +23,7 @@
 
 #include <Arduino.h>
 #include <hardware/gpio.h>
+#include <hardware/watchdog.h>
 
 #define BUS Serial1
 static const uint8_t TX_PIN = 16;
@@ -40,6 +41,7 @@ static const uint32_t ECHO_WINDOW_US = 150;     // our echo has arrived by then 
 static const uint32_t REPLY_BASE_US = 1500;     // first reply may take this long
 static const uint32_t REPLY_EACH_US = 600;      // plus per expected reply, on top of its wire time
 static const uint32_t BYTE_US = 10;             // 1 Mbps, 8N1
+static const uint32_t WATCHDOG_MS = 500;        // loop stuck this long -> the chip reboots itself
 
 // ---- bus line --------------------------------------------------------------------------------
 static bool released = false;
@@ -81,6 +83,7 @@ struct Stats
     uint32_t replyErrors;   // bus transactions with a missing or corrupt servo reply (marker sent)
     uint32_t okBatches;     // bus transactions answered in full
     uint32_t usbShort;      // USB writes that didn't take every byte
+    uint32_t watchdogResets; // reboots by our watchdog since power-on (kept in a watchdog scratch register)
 };
 static Stats stats = {};
 
@@ -183,7 +186,7 @@ static void hostError()
 static void sendStats()
 {
     const uint32_t v[] = {stats.requests, stats.badChecksum, stats.stalled, stats.junkBytes,
-                          stats.replyErrors, stats.okBatches, stats.usbShort};
+                          stats.replyErrors, stats.okBatches, stats.usbShort, stats.watchdogResets};
     const int n = sizeof(v);
     uint8_t m[6 + n];
     m[0] = 0xFF; m[1] = 0xFF; m[2] = BROADCAST_ID; m[3] = n + 2; m[4] = 0x00;
@@ -280,6 +283,12 @@ static void transact(const uint8_t *pkt, int n)
 // ---- Arduino ---------------------------------------------------------------------------------
 void setup()
 {
+    // scratch[0] survives a watchdog reboot but not a power cycle: count our own watchdog resets
+    uint32_t resets = watchdog_enable_caused_reboot() ? watchdog_hw->scratch[0] + 1 : 0;
+    watchdog_hw->scratch[0] = resets;
+    stats.watchdogResets = resets;
+    watchdog_enable(WATCHDOG_MS, true);   // true: paused while a debugger halts the core
+
     pinMode(LED_BUILTIN, OUTPUT);
     Serial.begin(BUS_BAUD);   // USB CDC: the host's baud setting is ignored
     BUS.setTX(TX_PIN);
@@ -291,6 +300,7 @@ void setup()
 
 void loop()
 {
+    watchdog_update();   // a transaction takes at most ~15 ms; anything stuck for 500 ms reboots
     while (Serial.available())
     {
         HostResult r = feedHostByte((uint8_t)Serial.read());

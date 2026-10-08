@@ -54,6 +54,14 @@ to come back.
 **From a laptop:** hold BOOTSEL while plugging the Pico into USB, then copy `firmware.uf2` to the
 `RPI-RP2` drive. Use this if the Pico doesn't answer the 1200 baud touch (e.g. a crashed firmware).
 
+## Watchdog
+
+The RP2040's hardware watchdog reboots the Pico if its main loop is stuck for 500 ms (a normal
+transaction takes at most ~15 ms). The Pico then disappears from USB for about a second;
+`robot/feetech_io.py` fails those reads fast (the walk skips steps), closes the port and reopens it
+when the Pico is back (following `/dev/serial/by-id/` if it returns as another `ttyACM`).
+`tools/bridge_stats.py` shows `watchdogResets`: how many times this happened since power-on.
+
 ## LED
 
 | LED | Meaning |

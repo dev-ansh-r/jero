@@ -37,6 +37,10 @@ class BusError(IOError):
     pass
 
 
+class PortLost(BusError):
+    """The tty went away (the Pico rebooted, e.g. by its watchdog, or was unplugged)."""
+
+
 def checksum(body: bytes) -> int:
     return ~sum(body) & 0xFF
 
@@ -91,26 +95,38 @@ class SerialTransport:
                 if time.monotonic() > deadline:
                     raise BusError("write to the bus bridge timed out") from None
                 select.select([], [self.fd], [], 0.005)
+            except OSError as exc:
+                raise PortLost(f"bus bridge port lost: {exc}") from exc
 
     def read(self, timeout: float) -> bytes:
         """Whatever arrives within ``timeout`` seconds (b"" if nothing)."""
         import select
 
-        r, _, _ = select.select([self.fd], [], [], max(0.0, timeout))
-        if not r:
-            return b""
         try:
-            return os.read(self.fd, 4096)
+            r, _, _ = select.select([self.fd], [], [], max(0.0, timeout))
+            if not r:
+                return b""
+            data = os.read(self.fd, 4096)
         except BlockingIOError:
             return b""
+        except (OSError, ValueError) as exc:
+            raise PortLost(f"bus bridge port lost: {exc}") from exc
+        if not data:
+            raise PortLost("bus bridge port lost: end of file (device gone)")
+        return data
 
     def close(self) -> None:
-        os.close(self.fd)
+        try:
+            os.close(self.fd)
+        except OSError:
+            pass
 
 
 class FeetechIO:
-    def __init__(self, transport, timeout_s: float = 0.025, quiet_after_error_s: float = 0.04):
+    def __init__(self, transport, timeout_s: float = 0.025, quiet_after_error_s: float = 0.04, reopen=None):
         self.t = transport
+        self._reopen = reopen  # () -> new transport, used after PortLost
+        self._next_reopen = 0.0
         self.timeout_s = timeout_s
         self.quiet_after_error_s = quiet_after_error_s
         self.errors = 0
@@ -135,6 +151,26 @@ class FeetechIO:
             log.warning("servo bus: %s (errors so far: %d)", msg, self.errors)
             self._last_log = now
         raise BusError(msg)
+
+    def _ensure_open(self) -> None:
+        if self.t is not None:
+            return
+        now = time.monotonic()
+        if self._reopen is None or now < self._next_reopen:
+            raise BusError("servo bus port is closed (bridge rebooting?)")
+        self._next_reopen = now + 0.2
+        try:
+            self.t = self._reopen()
+        except OSError as exc:
+            raise BusError(f"servo bus: reopen failed: {exc}") from exc
+        self._dirty = True
+        log.warning("servo bus: port reopened")
+
+    def _lost(self, exc: PortLost) -> None:
+        if self.t is not None:
+            self.t.close()  # free the tty now, so the Pico can come back under the same name
+        self.t = None
+        self._fail(str(exc))
 
     def _send(self, data: bytes) -> None:
         self._drain()
@@ -170,13 +206,22 @@ class FeetechIO:
 
     def _sync_read(self, ids, addr: int, datalen: int) -> list[bytes]:
         ids = [int(i) for i in ids]
-        self._send(packet(BROADCAST, INST_SYNC_READ, bytes([addr, datalen, *ids])))
-        return self._read_replies(ids, datalen)
+        self._ensure_open()
+        try:
+            self._send(packet(BROADCAST, INST_SYNC_READ, bytes([addr, datalen, *ids])))
+            return self._read_replies(ids, datalen)
+        except PortLost as exc:
+            self._lost(exc)
+            raise  # unreachable: _lost raises
 
     def _sync_write(self, ids, addr: int, values: list[bytes]) -> None:
         datalen = len(values[0])
         params = bytes([addr, datalen]) + b"".join(bytes([int(i)]) + v for i, v in zip(ids, values))
-        self._send(packet(BROADCAST, INST_SYNC_WRITE, params))
+        self._ensure_open()
+        try:
+            self._send(packet(BROADCAST, INST_SYNC_WRITE, params))
+        except PortLost as exc:
+            self._lost(exc)
 
     # -- rustypot-compatible API (what upstream HWI and tools call) --------------------------
     def read_present_position(self, ids) -> list[float]:
@@ -208,9 +253,26 @@ class FeetechIO:
         self._sync_write(ids, REG_GOAL_TIME, [struct.pack("<H", int(t)) for t in goal_time])
 
 
+def resolve_port(port: str) -> str:
+    """``port`` if it exists, else the Pico by its stable by-id name, else any ttyACM."""
+    import glob
+
+    if os.path.exists(port):
+        return port
+    for pattern in ("/dev/serial/by-id/*Pico*", "/dev/serial/by-id/*RP2040*", "/dev/ttyACM*"):
+        hits = sorted(glob.glob(pattern))
+        if hits:
+            return hits[0]
+    raise FileNotFoundError(f"{port} not found and no Pico on USB")
+
+
 def open_bus(port: str, baudrate: int = 1000000) -> FeetechIO:
     timeout_ms = float(os.environ.get("JERO_BUS_TIMEOUT_MS", "25"))
-    return FeetechIO(SerialTransport(port), timeout_s=timeout_ms / 1000.0)
+    return FeetechIO(
+        SerialTransport(resolve_port(port)),
+        timeout_s=timeout_ms / 1000.0,
+        reopen=lambda: SerialTransport(resolve_port(port)),
+    )
 
 
 def install() -> None:
