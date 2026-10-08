@@ -91,6 +91,17 @@ if [ "$REPLACE_AUTOSTART" = 1 ]; then
   sudo systemctl enable jero-walk.service
 fi
 
+step "Bluetooth for the PS4 pad (reconnects with the PS button after a reboot)"
+# AutoEnable: adapter powered at boot. ClassicBondedOnly=false: accept the pad's HID reconnect.
+sudo sed -i 's/^#\?AutoEnable=.*/AutoEnable=true/' /etc/bluetooth/main.conf
+sudo sed -i 's/^#\?ClassicBondedOnly=.*/ClassicBondedOnly=false/' /etc/bluetooth/input.conf
+sudo install -m 755 "$REPO/robot/jero-bt-setup.sh" /usr/local/bin/jero-bt-setup
+sudo install -m 644 "$REPO/robot/systemd/jero-bt-connectable.service" /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now jero-bt-connectable.service
+echo "pair the pad once: SHARE+PS until it double-flashes, then in bluetoothctl:"
+echo "  btmgmt ssp on (pairing only) / scan on / pair <addr> / trust <addr> / connect <addr>, then btmgmt ssp off"
+
 step "Security checklist (event Wi-Fi is hostile)"
 cat <<'EOF'
   [ ] passwd                                  # default is bdxv2 / ilovemyduck

@@ -1,0 +1,14 @@
+# Installed by robot/setup_pi.sh. Runs robot/jero-bt-setup.sh at every boot.
+[Unit]
+Description=Jero: Bluetooth on, SSP off, connectable (PS4 pad reconnect)
+After=bluetooth.service
+Wants=bluetooth.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/jero-bt-setup
+RemainAfterExit=yes
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

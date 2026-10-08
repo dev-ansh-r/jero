@@ -44,6 +44,20 @@ Jero's Pi runs (verified 4 Oct 2026: Raspberry Pi OS Lite 64-bit, Debian 13 trix
 The docs below say `workon open-duck-mini-runtime`; with this setup the venv is already active
 from `~/.bashrc` (or `source ~/.virtualenvs/open-duck-mini-runtime/bin/activate`).
 
+### PS4 controller (Bluetooth)
+
+`setup_pi.sh` sets Bluetooth up so the pad reconnects with the PS button after every boot:
+`AutoEnable=true`, `ClassicBondedOnly=false`, and `jero-bt-connectable.service`, which makes the
+adapter **connectable** and turns **SSP off** at boot (`robot/jero-bt-setup.sh`). Why:
+
+- not connectable: the Pi ignores the pad calling it after a reboot;
+- SSP on: the kernel refuses the pad's input channel ("Connection refused - security block" in
+  `sudo btmon`) because the pad asks for it ~10 ms before encryption is up, and never retries.
+
+Pair once: `sudo btmgmt ssp on`, pad off, SHARE+PS until it double-flashes, then in `bluetoothctl`:
+`scan on`, `pair <addr>`, `trust <addr>`, `connect <addr>`; then `sudo btmgmt ssp off`. After that:
+press PS, wait for a solid light bar, `ls /dev/input/js0`. Start the walk only once `js0` exists.
+
 ## 1. Servo IDs (before assembly)
 
 ```bash
