@@ -237,13 +237,13 @@ class FeetechIO:
     def read_present_position(self, ids) -> list[float]:
         self._vel_cache = None
         pos, vel = self._read_pos_vel(ids)
-        self._vel_cache = (tuple(int(i) for i in ids), vel, time.monotonic())
+        self._vel_cache = (tuple(int(i) for i in ids), vel, time.perf_counter())
         return pos
 
     def read_present_velocity(self, ids) -> list[float]:
         cache, self._vel_cache = self._vel_cache, None  # each cached batch is used at most once
         key = tuple(int(i) for i in ids)
-        if cache is not None and cache[0] == key and time.monotonic() - cache[2] < self.vel_cache_s:
+        if cache is not None and cache[0] == key and time.perf_counter() - cache[2] < self.vel_cache_s:
             return cache[1]  # from the same bus transaction as the positions just read
         return self._read_pos_vel(ids)[1]
 

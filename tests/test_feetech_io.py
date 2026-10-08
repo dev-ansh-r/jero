@@ -239,6 +239,6 @@ def test_velocity_cache_not_used_for_other_ids_or_when_old(io, bridge):
     io.read_present_velocity(IDS[:3])  # different IDs: fresh read
     assert bridge.sync_reads - n0 == 1
     io.read_present_position(IDS)
-    time.sleep(0.03)  # older than vel_cache_s (15 ms)
+    time.sleep(0.05)  # older than vel_cache_s (15 ms)
     io.read_present_velocity(IDS)
     assert bridge.sync_reads - n0 == 3
