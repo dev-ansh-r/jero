@@ -30,6 +30,7 @@ class MuxController:
         self.buttons = Buttons()
         self.source = "idle"
         self._last_log = 0.0
+        self._pad_down = {}
         self._log_every_s = log_every_s
 
     def _xbox(self):
@@ -57,6 +58,12 @@ class MuxController:
         if pad is not None:
             pad_cmds, pad_pressed, lt, rt = pad
             pressed = {k: v or pad_pressed[k] for k, v in pressed.items()}
+            for k, v in pad_pressed.items():  # log each new pad button press (A = pause/resume)
+                if v and not self._pad_down.get(k):
+                    names = getattr(self.xbox, "jero_button_names", {})
+                    hint = f" ({names[k]})" if k in names else ""
+                    log.info("pad button %s%s%s", k, hint, ": pause/resume" if k == "A" else "")
+                self._pad_down[k] = v
             if max(abs(c) for c in pad_cmds) > self.deadband:
                 commands, source = pad_cmds, "xbox"
 

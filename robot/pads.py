@@ -28,6 +28,11 @@ PS4 = {
     "buttons": {0: 0, 1: 1, 3: 3, 4: 2, 6: 4, 7: 5},
 }
 LAYOUTS = {"xbox": XBOX, "ps4": PS4}
+# what upstream's Xbox button names are on each pad (for logs)
+BUTTON_NAMES = {
+    "xbox": {},
+    "ps4": {"A": "cross", "B": "circle", "X": "square", "Y": "triangle", "LB": "L1", "RB": "R1"},
+}
 PS4_NAMES = ("wireless controller", "dualshock", "ps4", "sony")
 
 
@@ -74,6 +79,8 @@ def make_controller(command_freq: int, layout: str = "auto"):
     real = xc.pygame.joystick.Joystick
     xc.pygame.joystick.Joystick = lambda i: RemappedJoystick(real(i), LAYOUTS[chosen])
     try:
-        return xc.XBoxController(command_freq)  # its worker thread starts here, already remapped
+        ctrl = xc.XBoxController(command_freq)  # its worker thread starts here, already remapped
+        ctrl.jero_button_names = BUTTON_NAMES[chosen]
+        return ctrl
     finally:
         xc.pygame.joystick.Joystick = real
