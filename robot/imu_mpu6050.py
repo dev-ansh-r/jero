@@ -58,6 +58,9 @@ G = 9.80665
 
 # Defaults that jero_walk.py / imu_check.py may override before Imu() is constructed.
 DEFAULTS = {"bus": 1, "address": 0x68, "axes": "x,y,z", "gyro_bias": None, "calibrate_seconds": 2.0}
+# Policy-frame accel correction (robot frame, m/s^2), subtracted from every reading. Measured by
+# tools/imu_tilt.py: real reading in the standing start pose minus what the sim's IMU reads there.
+DEFAULTS["accel_offset"] = [0.0, 0.0, 0.0]
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict:
@@ -201,6 +204,9 @@ class Imu:
         self.dev = Mpu6050(bus=bus, address=int(cfg["address"]), bus_number=int(cfg["bus"]))
         self.idx, self.sign = parse_axes(cfg["axes"])
         self.x_offset = 0.0  # same knob as upstream (accel x tare)
+        self.accel_offset = np.asarray(cfg.get("accel_offset") or [0.0, 0.0, 0.0], float)
+        if np.any(self.accel_offset):
+            log.info("IMU accel offset (robot frame, m/s^2): %s", np.round(self.accel_offset, 3))
         self.errors = 0
 
         bias = cfg.get("gyro_bias")
@@ -249,12 +255,19 @@ class Imu:
         return bias
 
     # -- worker (mirrors upstream raw_imu) -----------------------------------------------
+    def sample(self) -> dict:
+        """One reading in the policy's terms: robot frame, gyro bias and tilt correction removed."""
+        accel, gyro = self.read_robot()
+        accel = accel - self.accel_offset
+        accel[0] -= self.x_offset
+        return {"gyro": gyro, "accelero": accel}
+
     def imu_worker(self):
         period = 1.0 / self.sampling_freq
         while True:
             t0 = time.time()
             try:
-                accel, gyro = self.read_robot()
+                data = self.sample()
                 self.errors = 0
             except OSError as exc:
                 self.errors += 1
@@ -267,8 +280,6 @@ class Imu:
                         pass
                 time.sleep(period)
                 continue
-            accel[0] -= self.x_offset
-            data = {"gyro": gyro, "accelero": accel}
             try:
                 self.imu_queue.put_nowait(data)
             except Full:  # keep the newest sample, unlike upstream's blocking put

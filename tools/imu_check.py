@@ -113,9 +113,16 @@ def main():
     print("\nRESULT:", "ALL PASS" if ok else "FAILED: fix mounting/wiring and run again (nothing saved)")
     if ok and not args.no_save:
         m.save_config(
-            {"bus": args.bus, "address": args.address, "axes": axes, "gyro_bias": [round(float(b), 6) for b in bias]}
+            {
+                "bus": args.bus,
+                "address": args.address,
+                "axes": axes,
+                "gyro_bias": [round(float(b), 6) for b in bias],
+                "accel_offset": [0.0, 0.0, 0.0],  # a new mounting invalidates the old tilt correction
+            }
         )
         print(f"saved to {m.CONFIG_PATH}. jero_walk.py --imu mpu6050 will use it.")
+        print("next: tools/imu_tilt.py (measures the tilt correction in the standing pose)")
     sys.exit(0 if ok else 1)
 
 

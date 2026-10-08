@@ -72,6 +72,20 @@ def test_scaling_flat_identity():
     assert m.ACCEL_CONFIG2 not in bus.writes  # reserved on a genuine MPU6050
 
 
+def test_tilt_correction_is_subtracted_from_accel_only():
+    bus = FakeBus(np.eye(3), [0.9, 0.1, G], [0.1, -0.2, 0.3])
+    imu = m.Imu(50, bus=bus, config=cfg(accel_offset=[0.766, 0.104, 0.0]), start_thread=False)
+    d = imu.sample()
+    assert np.allclose(d["accelero"], [0.134, -0.004, G], atol=0.01)  # = the sim's standing reading
+    assert np.allclose(d["gyro"], [0.1, -0.2, 0.3], atol=0.003)  # gyro untouched
+
+
+def test_no_accel_offset_in_config_means_none():
+    bus = FakeBus(np.eye(3), [0.9, 0.1, G], [0, 0, 0])
+    imu = m.Imu(50, bus=bus, config={k: v for k, v in cfg().items() if k != "accel_offset"}, start_thread=False)
+    assert np.allclose(imu.sample()["accelero"], [0.9, 0.1, G], atol=0.01)
+
+
 def test_mpu6500_clone_gets_accel_dlpf():
     bus = FakeBus(np.eye(3), [0, 0, G], [0, 0, 0], whoami=0x70)
     m.Imu(50, bus=bus, config=cfg(), start_thread=False)
