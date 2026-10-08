@@ -72,6 +72,14 @@ class SerialTransport:
         import termios
 
         self.fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+        try:
+            # Claim the port like rustypot did: a second program sharing it would swallow replies
+            # meant for this one. TIOCEXCL makes any further open() fail with EBUSY (except root).
+            import fcntl
+
+            fcntl.ioctl(self.fd, termios.TIOCEXCL)
+        except (OSError, AttributeError):
+            pass
         attrs = termios.tcgetattr(self.fd)
         attrs[0] = attrs[1] = attrs[3] = 0
         attrs[2] = termios.CS8 | termios.CREAD | termios.CLOCAL
@@ -283,12 +291,22 @@ def resolve_port(port: str) -> str:
     raise FileNotFoundError(f"{port} not found and no Pico on USB")
 
 
+def _open_transport(port: str) -> SerialTransport:
+    path = resolve_port(port)
+    try:
+        return SerialTransport(path)
+    except OSError as exc:
+        if exc.errno == 16:  # EBUSY
+            raise BusError(f"{path} is in use by another program (find it: fuser -v {path})") from exc
+        raise
+
+
 def open_bus(port: str, baudrate: int = 1000000) -> FeetechIO:
     timeout_ms = float(os.environ.get("JERO_BUS_TIMEOUT_MS", "25"))
     return FeetechIO(
-        SerialTransport(resolve_port(port)),
+        _open_transport(port),
         timeout_s=timeout_ms / 1000.0,
-        reopen=lambda: SerialTransport(resolve_port(port)),
+        reopen=lambda: _open_transport(port),
     )
 
 

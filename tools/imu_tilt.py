@@ -75,7 +75,13 @@ def main() -> int:
     io = feetech_io.open_bus(args.port)
     ids = [sid for sid, _ in JOINTS.values()]
     target = [init for _, init in JOINTS.values()]
-    start = retry(io.read_present_position, ids)
+    try:
+        start = retry(io.read_present_position, ids)
+    except OSError as exc:
+        sys.exit(
+            f"servos don't answer ({exc}).\nCheck: servo power on; nothing else using the port "
+            f"(fuser -v {args.port}); python ~/Jero/tools/bridge_stats.py"
+        )
     try:
         retry(io.set_kps, ids, [float(args.kp)] * len(ids))
         retry(io.write_goal_position, ids, list(start))

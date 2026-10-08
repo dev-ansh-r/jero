@@ -41,7 +41,13 @@ def main() -> int:
     p.add_argument("--port", default="/dev/ttyACM0")
     args = p.parse_args()
 
-    fd = os.open(args.port, os.O_RDWR | os.O_NOCTTY)
+    try:
+        fd = os.open(args.port, os.O_RDWR | os.O_NOCTTY)
+    except OSError as exc:
+        if exc.errno == 16:  # EBUSY: another program holds the port exclusively
+            print(f"{args.port} is in use by another program (find it: fuser -v {args.port})")
+            return 1
+        raise
     try:
         attrs = termios.tcgetattr(fd)
         attrs[0] = attrs[1] = attrs[3] = 0  # raw: no input/output/local processing
