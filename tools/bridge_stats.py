@@ -28,6 +28,7 @@ FIELDS = (
     ("okBatches", "transactions answered in full"),
     ("usbShort", "USB writes that lost bytes"),
     ("watchdogResets", "times the Pico rebooted itself because its loop got stuck (since power-on)"),
+    ("usbSlow", "replies still in the Pico's USB send buffer after 5 ms"),
 )
 
 

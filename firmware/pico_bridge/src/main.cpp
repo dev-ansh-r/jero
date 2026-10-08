@@ -42,6 +42,7 @@ static const uint32_t REPLY_BASE_US = 1500;     // first reply may take this lon
 static const uint32_t REPLY_EACH_US = 600;      // plus per expected reply, on top of its wire time
 static const uint32_t BYTE_US = 10;             // 1 Mbps, 8N1
 static const uint32_t WATCHDOG_MS = 500;        // loop stuck this long -> the chip reboots itself
+static const uint32_t USB_DRAIN_US = 5000;      // wait this long for a reply to leave the USB buffer
 
 // ---- bus line --------------------------------------------------------------------------------
 static bool released = false;
@@ -84,6 +85,7 @@ struct Stats
     uint32_t okBatches;     // bus transactions answered in full
     uint32_t usbShort;      // USB writes that didn't take every byte
     uint32_t watchdogResets; // reboots by our watchdog since power-on (kept in a watchdog scratch register)
+    uint32_t usbSlow;       // replies still in the USB send buffer after USB_DRAIN_US
 };
 static Stats stats = {};
 
@@ -152,10 +154,22 @@ static uint8_t rx[MAX_REPLIES * 40 + MAX_PACKET];
 static uint32_t lastReplyErrorMs = 0, lastHostErrorMs = 0, lastActivityMs = 0;
 static bool anyReplyError = false, anyHostError = false;
 
+static int usbTxCapacity = 0;   // free space of an empty USB send buffer (largest seen)
+
+// Write a reply and make sure it has actually left the USB send buffer before the next request
+// is handled: a reply that sits in the buffer and goes out with the next one is exactly the
+// "late reply" the Pi can't tell apart from a fresh one.
 static void usbWrite(const uint8_t *buf, size_t n)
 {
     if (Serial.write(buf, n) < n) stats.usbShort++;
     Serial.flush();
+    uint32_t t0 = micros();
+    while (Serial.availableForWrite() < usbTxCapacity)
+    {
+        if (micros() - t0 > USB_DRAIN_US) { stats.usbSlow++; break; }
+        Serial.flush();
+        delayMicroseconds(20);
+    }
 }
 
 static void sendErrorMarker(const Expect &e)
@@ -186,7 +200,8 @@ static void hostError()
 static void sendStats()
 {
     const uint32_t v[] = {stats.requests, stats.badChecksum, stats.stalled, stats.junkBytes,
-                          stats.replyErrors, stats.okBatches, stats.usbShort, stats.watchdogResets};
+                          stats.replyErrors, stats.okBatches, stats.usbShort, stats.watchdogResets,
+                          stats.usbSlow};
     const int n = sizeof(v);
     uint8_t m[6 + n];
     m[0] = 0xFF; m[1] = 0xFF; m[2] = BROADCAST_ID; m[3] = n + 2; m[4] = 0x00;
@@ -301,6 +316,8 @@ void setup()
 void loop()
 {
     watchdog_update();   // a transaction takes at most ~15 ms; anything stuck for 500 ms reboots
+    int free = Serial.availableForWrite();
+    if (free > usbTxCapacity) usbTxCapacity = free;   // learnt while idle, before any reply
     while (Serial.available())
     {
         HostResult r = feedHostByte((uint8_t)Serial.read());

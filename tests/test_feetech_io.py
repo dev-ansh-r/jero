@@ -34,6 +34,7 @@ class FakeBridge:
         self.late_next = 0.0  # seconds
         self.marker_next = False
         self.writes = []
+        self.sync_reads = 0
 
     def write(self, data: bytes):
         assert data[:2] == b"\xff\xff" and data[-1] == fio.checksum(data[2:-1])
@@ -48,6 +49,7 @@ class FakeBridge:
             return
         assert inst == fio.INST_SYNC_READ
         addr, n, ids = params[0], params[1], list(params[2:])
+        self.sync_reads += 1
         if self.drop_next:
             self.drop_next = False
             return
@@ -55,9 +57,12 @@ class FakeBridge:
             self.marker_next = False
             self.queue.append([time.monotonic(), status(0, b"")])
             return
-        src = self.pos if addr == fio.REG_PRESENT_POSITION else self.speed
-        fmt = "<h" if addr == fio.REG_PRESENT_POSITION else "<H"
-        batch = b"".join(status(i, struct.pack(fmt, src[i])) for i in ids)
+        if addr == fio.REG_PRESENT_POSITION and n == 4:
+            batch = b"".join(status(i, struct.pack("<hH", self.pos[i], self.speed[i])) for i in ids)
+        elif addr == fio.REG_PRESENT_POSITION:
+            batch = b"".join(status(i, struct.pack("<h", self.pos[i])) for i in ids)
+        else:
+            batch = b"".join(status(i, struct.pack("<H", self.speed[i])) for i in ids)
         self.queue.append([time.monotonic() + self.late_next, batch])
         self.late_next = 0.0
 
@@ -214,3 +219,26 @@ def test_reopen_is_rate_limited_while_the_pico_is_away():
         with pytest.raises(fio.BusError):
             io.read_present_position(IDS)
     assert len(calls) == 1  # at most one attempt per 0.2 s, each failing read stays fast
+
+
+def test_position_then_velocity_is_one_bus_transaction(io, bridge):
+    bridge.speed = {i: 100 + i for i in IDS}
+    n0 = bridge.sync_reads
+    pos = io.read_present_position(IDS)
+    vel = io.read_present_velocity(IDS)
+    assert bridge.sync_reads - n0 == 1  # one combined read (registers 56-59)
+    assert len(pos) == len(vel) == len(IDS)
+    assert vel == pytest.approx([fio.speed_to_rads(100 + i) for i in IDS])
+    io.read_present_velocity(IDS)  # cache is single-use: a second call reads the bus again
+    assert bridge.sync_reads - n0 == 2
+
+
+def test_velocity_cache_not_used_for_other_ids_or_when_old(io, bridge):
+    io.read_present_position(IDS)
+    n0 = bridge.sync_reads
+    io.read_present_velocity(IDS[:3])  # different IDs: fresh read
+    assert bridge.sync_reads - n0 == 1
+    io.read_present_position(IDS)
+    time.sleep(0.03)  # older than vel_cache_s (15 ms)
+    io.read_present_velocity(IDS)
+    assert bridge.sync_reads - n0 == 3

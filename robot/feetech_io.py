@@ -132,6 +132,8 @@ class FeetechIO:
         self.errors = 0
         self._dirty = True  # drain carefully before the first transaction too
         self._last_log = 0.0
+        self._vel_cache = None  # (ids, velocities, time) from the last combined read
+        self.vel_cache_s = 0.015  # HWI reads velocity right after position in the same step
 
     # -- plumbing --------------------------------------------------------------------------
     def _drain(self) -> None:
@@ -224,11 +226,26 @@ class FeetechIO:
             self._lost(exc)
 
     # -- rustypot-compatible API (what upstream HWI and tools call) --------------------------
+    def _read_pos_vel(self, ids) -> tuple[list[float], list[float]]:
+        """Position (56-57) and speed (58-59) in ONE sync read: a position batch can then never be
+        mistaken for a velocity batch, and each control step needs half the USB exchanges."""
+        data = self._sync_read(ids, REG_PRESENT_POSITION, 4)
+        pos = [pos_to_rad(struct.unpack_from("<h", d, 0)[0]) for d in data]
+        vel = [speed_to_rads(struct.unpack_from("<H", d, 2)[0]) for d in data]
+        return pos, vel
+
     def read_present_position(self, ids) -> list[float]:
-        return [pos_to_rad(struct.unpack("<h", d)[0]) for d in self._sync_read(ids, REG_PRESENT_POSITION, 2)]
+        self._vel_cache = None
+        pos, vel = self._read_pos_vel(ids)
+        self._vel_cache = (tuple(int(i) for i in ids), vel, time.monotonic())
+        return pos
 
     def read_present_velocity(self, ids) -> list[float]:
-        return [speed_to_rads(struct.unpack("<H", d)[0]) for d in self._sync_read(ids, REG_PRESENT_SPEED, 2)]
+        cache, self._vel_cache = self._vel_cache, None  # each cached batch is used at most once
+        key = tuple(int(i) for i in ids)
+        if cache is not None and cache[0] == key and time.monotonic() - cache[2] < self.vel_cache_s:
+            return cache[1]  # from the same bus transaction as the positions just read
+        return self._read_pos_vel(ids)[1]
 
     def write_goal_position(self, ids, goal_position) -> None:
         vals = [struct.pack("<h", rad_to_pos(float(r))) for r in goal_position]
