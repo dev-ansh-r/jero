@@ -28,6 +28,7 @@ log = logging.getLogger("jero.imu.qsh")
 TOOL = "see_workhorse"
 RATE_HZ = 200
 STALE_S = 0.2
+WARMUP_SAMPLES = 20  # the first few after a start are garbage (seen: up to 2.4 rad/s on the gyro)
 
 
 class SampleParser:
@@ -64,6 +65,7 @@ class _Stream:
         self.start()
 
     def start(self) -> None:
+        self.parser = SampleParser()
         cmd = [
             self.tool,
             f"-sensor={self.sensor}",
@@ -85,7 +87,7 @@ class _Stream:
         return self.proc is not None and self.proc.poll() is None
 
     def fresh(self) -> bool:
-        return self.parser.latest is not None and self.clock() - self.t < STALE_S
+        return self.parser.count > WARMUP_SAMPLES and self.clock() - self.t < STALE_S
 
     def close(self) -> None:
         if self.alive():

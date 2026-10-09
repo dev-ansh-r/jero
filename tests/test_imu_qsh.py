@@ -63,6 +63,7 @@ class FakeStream:
     def __init__(self, sensor, rate_hz, tool):
         self.sensor, self.parser, self.t, self.dead = sensor, imu_qsh.SampleParser(), time.monotonic(), False
         self.parser.latest = np.array(self.VALUES[sensor])
+        self.parser.count = imu_qsh.WARMUP_SAMPLES + 1
 
     def fresh(self):
         return time.monotonic() - self.t < imu_qsh.STALE_S
@@ -72,6 +73,7 @@ class FakeStream:
 
     def start(self):
         self.dead, self.t = False, time.monotonic()
+        self.parser.count = imu_qsh.WARMUP_SAMPLES + 1
 
     def close(self):
         self.dead = True
