@@ -83,9 +83,13 @@ boost() {
     if [ "$cap" -gt "$max" ]; then max="$cap"; best="$(basename "$(dirname "$f")")"; fi
   done
   if sudo -n true 2>/dev/null; then
-    sudo -n chrt -a -f -p 20 "$pid" >/dev/null 2>&1 && say "walk (PID $pid): real-time priority" || true
+    if sudo -n chrt -a -f -p 20 "$pid" >/dev/null 2>&1; then
+      say "walk (PID $pid): real-time priority"
+    fi
     if [ -n "$best" ]; then
-      sudo -n taskset -a -cp "${best#cpu}" "$pid" >/dev/null 2>&1 && say "walk pinned to $best (fastest core)" || true
+      if sudo -n taskset -a -cp "${best#cpu}" "$pid" >/dev/null 2>&1; then
+        say "walk pinned to $best (fastest core)"
+      fi
     fi
   else
     say "note: no passwordless sudo, walk runs at normal priority"
