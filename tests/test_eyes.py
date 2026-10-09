@@ -4,6 +4,7 @@ import json
 import math
 import sys
 import threading
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -125,3 +126,106 @@ def test_dashboard_serves_page_status_and_mjpeg():
         server.shutdown()
         server.server_close()
     assert sent and set(sent[-1]) == {"neck_pitch", "head_pitch", "head_yaw", "head_roll"}
+
+
+# -- show events: say / caption / mode / photo, too close, show_api ----------------------------
+import show_api
+
+
+class Fast(eyes.FakeSource):
+    def __init__(self, dist=None):
+        super().__init__()
+        self.dist = dist
+
+    def read(self):
+        color, depth = self.scene(0.5)
+        if self.dist is not None:
+            depth[:] = 2.5
+            depth[200:280, 280:360] = self.dist
+        return color, depth
+
+
+def serve(e):
+    server = eyes.ThreadingHTTPServer(("127.0.0.1", 0), eyes.make_handler(e))
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{server.server_address[1]}"
+
+
+def test_show_api_posts_events_and_page_stream_receives_them(tmp_path):
+    e = eyes.Eyes(Fast(), photos_dir=tmp_path)
+    e.step()
+    server, base = serve(e)
+    try:
+        stream = urllib.request.urlopen(base + "/api/events?after=0", timeout=5)
+        d = show_api.Dashboard(base)
+        assert d.say("Hello everyone!")["type"] == "say"
+        assert d.caption("DANCE MODE", 5, "party")["style"] == "party"
+        assert d.mode("dancing")["mode"] == "dancing"
+        got = []
+        while len(got) < 3:
+            line = stream.readline().decode()
+            if line.startswith("data: "):
+                got.append(json.loads(line[6:]))
+        assert [g["type"] for g in got] == ["say", "caption", "mode"] and got[0]["text"] == "Hello everyone!"
+        st = json.loads(urllib.request.urlopen(base + "/status.json", timeout=5).read())
+        assert st["say"] == "Hello everyone!" and st["mode"] == "dancing"
+        stream.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_photo_saves_frame_lists_and_serves_it(tmp_path):
+    e = eyes.Eyes(Fast(), photos_dir=tmp_path)
+    e.step()
+    e.photo(countdown=0, wait=True)
+    kinds = [ev["type"] for ev in e.events.items]
+    assert kinds == ["countdown", "photo"]
+    name = e.events.items[-1]["name"]
+    assert eyes.PHOTO_NAME.match(name) and (tmp_path / name).is_file()
+    server, base = serve(e)
+    try:
+        assert json.loads(urllib.request.urlopen(base + "/api/photos", timeout=5).read())[0]["name"] == name
+        assert urllib.request.urlopen(base + f"/photos/{name}", timeout=5).read()[:2] == b"\xff\xd8"
+        with pytest.raises(urllib.error.HTTPError):  # nothing outside the photo folder
+            urllib.request.urlopen(base + "/photos/..%2Feyes.py", timeout=5)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_bad_posts_are_rejected(tmp_path):
+    e = eyes.Eyes(Fast(), photos_dir=tmp_path)
+    server, base = serve(e)
+    try:
+        for path, body in (("/api/say", b"{}"), ("/api/launch", b"{}"), ("/api/say", b"not json")):
+            req = urllib.request.Request(base + path, data=body, method="POST")
+            with pytest.raises(urllib.error.HTTPError) as err:
+                urllib.request.urlopen(req, timeout=5)
+            assert err.value.code == 400
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert not e.events.items
+
+
+def test_too_close_fires_once_until_they_step_back():
+    clock, hits = Clock(), []
+    src = Fast(dist=0.3)
+    e = eyes.Eyes(src, on_close=hits.append, clock=clock)
+    for _ in range(5):
+        e.step()
+        clock.t += 1.0
+    assert len(hits) == 1 and hits[0] == pytest.approx(0.3, abs=0.02)
+    src.dist = 1.5  # steps back ...
+    e.step()
+    clock.t += 10
+    src.dist = 0.35  # ... and comes close again
+    e.step()
+    assert len(hits) == 2 and [ev["type"] for ev in e.events.items] == ["close", "close"]
+
+
+def test_show_api_survives_no_dashboard():
+    d = show_api.Dashboard("http://127.0.0.1:9", timeout_s=0.2)
+    assert d.say("anyone?") is None and d.photo() is None

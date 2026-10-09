@@ -27,6 +27,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(1, str(HERE.parent / "jero_link" / "src"))
 
+from show_api import Dashboard
 from skills import SkillExecutor, plan_for
 from tts_elevenlabs import ElevenLabsTTS
 
@@ -125,7 +126,13 @@ def main() -> int:
         from jero_link import JeroClient, load_key
 
         client = JeroClient(args.host, port=args.port, key=load_key(args.key)).start()
-    executor = SkillExecutor(client, say=svc.say).start()
+    dashboard = Dashboard()  # the speech bubble on brain/eyes.py's page (skipped if it isn't running)
+
+    def say(text: str) -> None:
+        dashboard.say(text)
+        svc.say(text)
+
+    executor = SkillExecutor(client, say=say).start()
     threading.Thread(target=svc.run_mic_loop, name="jero-mic", daemon=True).start()
     log.info("listening (trigger: %s). Ctrl+C to quit", config.get("trigger", "vad"))
     try:

@@ -11,9 +11,13 @@ the numbers. Runs in its own environment (setup: robot/setup_vision.sh), next to
     ~/.virtualenvs/jero-vision/bin/python ~/Jero/brain/eyes.py --follow --dry-run   # log head commands only
 
 --follow sends head poses over the Jero link (the walk must run with the link on and be unpaused);
-the walk keeps balancing, vision only moves the head. The dashboard is view-only: anyone on the
-network can watch the camera, nobody can control anything through it.
-Camera mounted upside down? --rotate 180.
+the walk keeps balancing, vision only moves the head.
+
+Show events: programs on the robot POST to http://127.0.0.1:8080/api/{say,caption,mode,photo}
+(brain/show_api.py; e.g. `python brain/show_api.py say "Hello!"`), and every open page shows them
+at once: speech bubble, banner captions, mode, a 3-2-1 photo countdown with the picture saved to
+~/jero-photos/. Viewers on the network can watch; only the robot itself can trigger (--allow-remote).
+--react: the surprise sound when someone comes closer than 45 cm. Camera upside down? --rotate 180.
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ import json
 import logging
 import math
 import os
+import re
 import sys
 import threading
 import time
@@ -237,7 +242,8 @@ def render(color: np.ndarray, depth: np.ndarray, target: Target | None, quality:
     """JPEG bytes of the annotated colour image and the depth heatmap."""
     import cv2
 
-    heat = cv2.applyColorMap(cv2.convertScaleAbs(np.clip(depth, 0, 4) * (255 / 4)), cv2.COLORMAP_TURBO)
+    near_red = cv2.convertScaleAbs((4 - np.clip(depth, 0, 4)) * (255 / 4))  # near = red, far = blue
+    heat = cv2.applyColorMap(near_red, cv2.COLORMAP_TURBO)
     heat[(depth <= 0) | ~np.isfinite(depth)] = (18, 18, 18)
     col = color.copy()
     h, w = col.shape[:2]
@@ -255,14 +261,61 @@ def render(color: np.ndarray, depth: np.ndarray, target: Target | None, quality:
     return cv2.imencode(".jpg", col, enc)[1].tobytes(), cv2.imencode(".jpg", heat, enc)[1].tobytes()
 
 
+# -- show events (speech, captions, photos, ...) ----------------------------------------------
+class Events:
+    """Recent dashboard events with increasing ids; the page follows them over /api/events (SSE)."""
+
+    def __init__(self, maxlen: int = 100, clock=time.time):
+        self.cond = threading.Condition()
+        self.items: deque = deque(maxlen=maxlen)
+        self.seq = 0
+        self.clock = clock
+
+    def push(self, kind: str, **data) -> dict:
+        with self.cond:
+            self.seq += 1
+            ev = {"id": self.seq, "type": kind, "t": round(self.clock(), 3), **data}
+            self.items.append(ev)
+            self.cond.notify_all()
+        log.info("event %s %s", kind, {k: v for k, v in data.items() if k != "url"})
+        return ev
+
+    def since(self, after: int, timeout: float = 15.0) -> list:
+        with self.cond:
+            self.cond.wait_for(lambda: self.seq > after, timeout=timeout)
+            return [e for e in self.items if e["id"] > after]
+
+
+PHOTO_NAME = re.compile(r"^jero-\d{8}-\d{6}(-\d+)?\.jpg$")
+EVENT_KINDS = ("say", "caption", "mode", "photo")
+
+
 # -- the loop + shared state ----------------------------------------------------------------
 class Eyes:
-    def __init__(self, source, rotate: int = 0, follow: HeadFollow | None = None, client=None):
+    CLOSE_M = 0.45  # "too close!" below this ...
+    REARM_M = 0.7  # ... once, until the target is back beyond this
+    CLOSE_COOLDOWN_S = 6.0
+
+    def __init__(
+        self,
+        source,
+        rotate: int = 0,
+        follow: HeadFollow | None = None,
+        client=None,
+        photos_dir: Path | None = None,
+        on_close=None,
+        clock=time.monotonic,
+    ):
         self.source, self.rotate, self.follow, self.client = source, rotate, follow, client
         self.k = source.k.rotated_180() if rotate == 180 else source.k
+        self.photos_dir = Path(photos_dir or Path.home() / "jero-photos")
+        self.on_close, self.clock = on_close, clock
+        self.events = Events()
         self.cond = threading.Condition()
         self.seq = 0
         self.jpeg = {"color": b"", "depth": b""}
+        self.last_color = None
+        self._close_armed, self._close_t = True, -1e9
         self.status = {
             "camera": source.name,
             "fps": 0.0,
@@ -272,6 +325,8 @@ class Eyes:
             "head": None,
             "frame": 0,
             "size": [self.k.width, self.k.height],
+            "mode": "standby",
+            "say": None,
         }
         self._times = deque(maxlen=30)
         self._running = False
@@ -289,12 +344,14 @@ class Eyes:
             head = self.follow.update(target)
             if self.client is not None:
                 self.client.head(**head)
+        self._check_close(target)
         cj, dj = render(color, depth, target)
         self._times.append(time.monotonic())
         fps = (len(self._times) - 1) / (self._times[-1] - self._times[0]) if len(self._times) > 1 else 0.0
         with self.cond:
             self.seq += 1
             self.jpeg = {"color": cj, "depth": dj}
+            self.last_color = color
             self.status.update(
                 fps=round(fps, 1),
                 frame=self.seq,
@@ -310,6 +367,70 @@ class Eyes:
             )
             self.cond.notify_all()
         return True
+
+    def _check_close(self, target: Target | None) -> None:
+        d = target.distance if target is not None else None
+        if d is not None and d < self.CLOSE_M:
+            now = self.clock()
+            if self._close_armed and now - self._close_t > self.CLOSE_COOLDOWN_S:
+                self._close_armed, self._close_t = False, now
+                self.events.push("close", distance=round(d, 2))
+                if self.on_close is not None:
+                    self.on_close(d)
+        elif d is None or d > self.REARM_M:
+            self._close_armed = True
+
+    # -- show actions (from /api/*: the show controller, voice, a terminal) -----------------
+    def say(self, text: str) -> dict:
+        with self.cond:
+            self.status["say"] = text
+        return self.events.push("say", text=text)
+
+    def caption(self, text: str, seconds: float = 4.0, style: str = "info") -> dict:
+        return self.events.push("caption", text=text, seconds=seconds, style=style)
+
+    def set_mode(self, mode: str) -> dict:
+        with self.cond:
+            self.status["mode"] = mode
+        return self.events.push("mode", mode=mode)
+
+    def photo(self, countdown: int = 3, wait: bool = False) -> dict:
+        """Countdown on the page, then save the plain colour frame to photos_dir and show it."""
+        countdown = max(0, min(int(countdown), 10))
+        ev = self.events.push("countdown", seconds=countdown)
+
+        def shoot():
+            time.sleep(countdown)
+            with self.cond:
+                frame = self.last_color
+            if frame is None:
+                self.events.push("caption", text="No picture: camera not ready", seconds=3, style="warn")
+                return
+            name = self.save_photo(frame)
+            self.events.push("photo", name=name, url=f"/photos/{name}")
+
+        if wait:
+            shoot()
+        else:
+            threading.Thread(target=shoot, name="jero-photo", daemon=True).start()
+        return ev
+
+    def save_photo(self, frame: np.ndarray) -> str:
+        import cv2
+
+        self.photos_dir.mkdir(parents=True, exist_ok=True)
+        stem = time.strftime("jero-%Y%m%d-%H%M%S")
+        name, k = f"{stem}.jpg", 1
+        while (self.photos_dir / name).exists():
+            name, k = f"{stem}-{k}.jpg", k + 1
+        cv2.imwrite(str(self.photos_dir / name), frame, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+        return name
+
+    def photos(self, limit: int = 24) -> list:
+        if not self.photos_dir.is_dir():
+            return []
+        files = sorted((f for f in self.photos_dir.glob("jero-*.jpg") if PHOTO_NAME.match(f.name)), reverse=True)
+        return [{"name": f.name, "url": f"/photos/{f.name}"} for f in files[:limit]]
 
     def run(self):
         self._running = True
@@ -329,18 +450,21 @@ class Eyes:
             return self.seq, self.jpeg
 
 
-def make_handler(eyes: Eyes):
+def make_handler(eyes: Eyes, allow_remote: bool = False):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # quiet: one line per client, not per request
             pass
 
-        def _send(self, body: bytes, ctype: str):
-            self.send_response(200)
+        def _send(self, body: bytes, ctype: str, code: int = 200):
+            self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
+
+        def _json(self, obj, code: int = 200):
+            self._send(json.dumps(obj).encode(), "application/json", code)
 
         def do_GET(self):
             path = self.path.split("?")[0]
@@ -355,8 +479,71 @@ def make_handler(eyes: Eyes):
             elif path in ("/color.jpg", "/depth.jpg"):
                 _, jpeg = eyes.wait_frame(0)
                 self._send(jpeg[path[1:6]], "image/jpeg")
+            elif path == "/api/events":
+                self._events()
+            elif path == "/api/photos":
+                self._json(eyes.photos())
+            elif path.startswith("/photos/") and PHOTO_NAME.match(path[8:]):
+                f = eyes.photos_dir / path[8:]
+                if f.is_file():
+                    self._send(f.read_bytes(), "image/jpeg")
+                else:
+                    self.send_error(404)
             else:
                 self.send_error(404)
+
+        def do_POST(self):
+            if not allow_remote and self.client_address[0] not in ("127.0.0.1", "::1"):
+                self._json({"error": "show actions only from the robot itself"}, 403)
+                return
+            kind = self.path.split("?")[0].removeprefix("/api/")
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(min(n, 8192)) or b"{}") if n else {}
+            except ValueError:
+                self._json({"error": "body must be JSON"}, 400)
+                return
+            text = str(body.get("text", ""))[:300]
+            if kind == "say" and text:
+                ev = eyes.say(text)
+            elif kind == "caption" and text:
+                ev = eyes.caption(text, float(body.get("seconds", 4.0)), str(body.get("style", "info"))[:16])
+            elif kind == "mode" and body.get("mode"):
+                ev = eyes.set_mode(str(body["mode"])[:40])
+            elif kind == "photo":
+                ev = eyes.photo(int(body.get("countdown", 3)))
+            else:
+                self._json({"error": "POST /api/say|caption|mode|photo with a JSON body"}, 400)
+                return
+            self._json(ev)
+
+        def _events(self):
+            query = self.path.partition("?")[2]
+            after = None
+            for part in query.split("&"):
+                if part.startswith("after="):
+                    try:
+                        after = int(part[6:])
+                    except ValueError:
+                        pass
+            if after is None:
+                after = eyes.events.seq  # new viewers: only what happens from now on
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            try:
+                self.wfile.write(b"retry: 1500\n\n")
+                while True:
+                    items = eyes.events.since(after, timeout=15.0)
+                    if not items:
+                        self.wfile.write(b": ping\n\n")
+                    for ev in items:
+                        after = ev["id"]
+                        self.wfile.write(f"id: {ev['id']}\ndata: {json.dumps(ev)}\n\n".encode())
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
         def _stream(self, which: str):
             log.info("viewer %s: %s stream", self.client_address[0], which)
@@ -400,6 +587,9 @@ def main() -> int:
     p.add_argument("--rotate", type=int, default=0, choices=(0, 180))
     p.add_argument("--follow", action="store_true", help="turn the head toward the nearest target (Jero link)")
     p.add_argument("--dry-run", action="store_true", help="--follow: log head commands, don't send them")
+    p.add_argument("--react", action="store_true", help="play the surprise sound when someone gets too close")
+    p.add_argument("--photos", default=str(Path.home() / "jero-photos"), help="where photos are saved")
+    p.add_argument("--allow-remote", action="store_true", help="accept show actions (POST) from other machines")
     p.add_argument("--host", default="127.0.0.1", help="robot running jero_walk.py with the link on")
     p.add_argument("--port", type=int, default=5005)
     p.add_argument("--key", default=os.path.expanduser("~/.config/jero/link.key"))
@@ -421,12 +611,29 @@ def main() -> int:
                 log.info("head yaw=%+.2f pitch=%+.2f", kw["head_yaw"], kw["head_pitch"])
 
         client = LogClient()
-    eyes = Eyes(source, rotate=args.rotate, follow=HeadFollow() if args.follow else None, client=client)
+    on_close = None
+    if args.react:
+        from expressions import Speaker
+
+        speaker = Speaker()
+
+        def on_close(d):
+            speaker.play("surprise")
+
+    eyes = Eyes(
+        source,
+        rotate=args.rotate,
+        follow=HeadFollow() if args.follow else None,
+        client=client,
+        photos_dir=Path(args.photos).expanduser(),
+        on_close=on_close,
+    )
     threading.Thread(target=eyes.run, name="jero-eyes", daemon=True).start()
 
-    server = ThreadingHTTPServer((args.bind, args.http_port), make_handler(eyes))
+    server = ThreadingHTTPServer((args.bind, args.http_port), make_handler(eyes, allow_remote=args.allow_remote))
     server.daemon_threads = True
-    log.info("dashboard: http://%s:%d/", "<this machine's IP>" if args.bind == "0.0.0.0" else args.bind, args.http_port)
+    shown = "<this machine's IP>" if args.bind == "0.0.0.0" else args.bind
+    log.info("dashboard: http://%s:%d/  (photos: %s)", shown, args.http_port, eyes.photos_dir)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
