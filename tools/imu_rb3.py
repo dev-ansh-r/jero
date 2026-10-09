@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Test the RB3 Gen 2's onboard IMU, then calibrate it for the walk. Nothing moves; servos can be off.
+"""Test the RealSense D455's IMU (IIO accel_3d/gyro_3d). Nothing moves; servos can be off.
+
+NOTE: these IIO devices are the camera's IMU (on the head), not the RB3's onboard IMU. The walk
+needs a body IMU (MPU9250 via tools/imu_check.py); jero_walk.py refuses this one.
 
     python ~/Jero/tools/imu_rb3.py --install        # once: stream the IMU at every boot (sudo)
     python ~/Jero/tools/imu_rb3.py                  # test: rate, gravity, gyro noise (board still)

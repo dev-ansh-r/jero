@@ -1,6 +1,12 @@
-"""RB3 Gen 2 onboard IMU through Linux IIO (sensor hub: accel_3d + gyro_3d), MPU6050-driver compatible.
+"""RealSense D455 IMU through Linux IIO (HID sensor: accel_3d + gyro_3d), MPU6050-driver compatible.
 
-The board's accelerometer and gyro appear as /sys/bus/iio/devices/iio:deviceN with names accel_3d and
+NOT the RB3 Gen 2's onboard IMU: these accel_3d/gyro_3d devices are the D455's own IMU (USB HID,
+8086:0b5c interface 5); they appear only while the camera is plugged in. The camera sits on the
+head, which the policy and head commands move, so this is NOT a body IMU for the walk
+(robot/jero_walk.py refuses it). The RB3's onboard ICM-42688 is behind Qualcomm's sensor hub (QSH
+C++ API), not IIO. Useful for the camera's own orientation (e.g. head pitch for vision).
+
+The D455's accelerometer and gyro appear as /sys/bus/iio/devices/iio:deviceN with names accel_3d and
 gyro_3d (HID sensor hub). This class has the same ``read_si()`` / ``init()`` / ``whoami`` as
 ``imu_mpu6050.Mpu6050``, so ``imu_mpu6050.Imu`` uses it when ~/.config/jero/imu.json says
 ``"backend": "iio"`` (tools/imu_check.py --backend iio writes that): mounting axes, gyro bias, tilt
@@ -50,7 +56,7 @@ def find_device(name: str, root: Path = IIO_ROOT) -> Path:
                 return d
         except OSError:
             continue
-    raise FileNotFoundError(f"no IIO device named {name!r} under {root} (is this an RB3 Gen 2?)")
+    raise FileNotFoundError(f"no IIO device named {name!r} under {root} (is the RealSense plugged in?)")
 
 
 def scan_layout(dev: Path) -> tuple[int, dict]:
@@ -171,7 +177,7 @@ class IioImu:
         self.whoami = None  # imu_check prints it for the MPU; IIO has no chip ID register
         self.accel = _Triple(find_device("accel_3d", self.root), "accel", Path(dev_dir))
         self.gyro = _Triple(find_device("gyro_3d", self.root), "anglvel", Path(dev_dir))
-        self.name = f"RB3 onboard IMU (IIO accel_3d + gyro_3d, {self.accel.mode}/{self.gyro.mode})"
+        self.name = f"RealSense D455 IMU (IIO accel_3d + gyro_3d, {self.accel.mode}/{self.gyro.mode})"
         self.init()
 
     def init(self) -> None:

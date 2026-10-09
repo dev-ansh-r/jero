@@ -66,6 +66,7 @@ def main():
     imu = m.Imu(50, config=cfg, start_thread=False)
     if args.backend == "iio":
         print(f"connected: {imu.dev.name}, {imu.dev.rates()[0]:g} / {imu.dev.rates()[1]:g} Hz")
+        print("WARNING: this is the RealSense's IMU on the HEAD: the walk can't use it (head moves)")
     else:
         print(f"connected: WHO_AM_I 0x{imu.dev.whoami:02x} ({m.KNOWN_WHOAMI.get(imu.dev.whoami, 'unknown')})")
 

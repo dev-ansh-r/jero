@@ -58,9 +58,13 @@ def install_mpu6050(log) -> None:
     if not imu_mpu6050.CONFIG_PATH.is_file():
         sys.exit(f"{imu_mpu6050.CONFIG_PATH} missing: run tools/imu_check.py once (measures the mounting)")
     imu_mpu6050.parse_axes(cfg["axes"])  # fail early on a bad file
+    if cfg.get("backend") == "iio":
+        sys.exit(
+            f"{imu_mpu6050.CONFIG_PATH} uses the RealSense IMU (on the head, which moves): not a body IMU. "
+            "Calibrate the MPU9250 with tools/imu_check.py"
+        )
     sys.modules["mini_bdx_runtime.raw_imu"] = imu_mpu6050
-    backend = "RB3 onboard (IIO)" if cfg.get("backend") == "iio" else "MPU6050"
-    log.info("IMU: %s axes=%s (keep the robot still for 2 s at start: gyro bias)", backend, cfg["axes"])
+    log.info("IMU: MPU6050 axes=%s (keep the robot still for 2 s at start: gyro bias)", cfg["axes"])
 
 
 def parse_args():
