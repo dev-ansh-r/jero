@@ -201,7 +201,12 @@ class Imu:
         self.sampling_freq = sampling_freq
         if upside_down:
             log.warning("imu_upside_down is ignored for the MPU6050: mounting is set by 'axes' (tools/imu_check.py)")
-        if cfg.get("backend", "mpu6050") == "iio":  # RB3 Gen 2 onboard IMU (robot/imu_iio.py)
+        backend = cfg.get("backend", "mpu6050")
+        if backend == "qsh":  # RB3 Gen 2 onboard ICM-42688 via the sensor hub (robot/imu_qsh.py)
+            from imu_qsh import QshImu
+
+            self.dev = QshImu()
+        elif backend == "iio":  # RealSense D455 IMU (robot/imu_iio.py): camera on the head
             from imu_iio import IioImu
 
             self.dev = IioImu(accel_sign=float(cfg.get("accel_sign", -1.0)))

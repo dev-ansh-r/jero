@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure the IMU mounting (MPU6050 on I2C, or --backend iio: RB3 Gen 2 onboard), verify signs, save it.
+"""Measure the IMU mounting (MPU6050 on I2C, or --backend qsh: RB3 Gen 2 onboard), verify signs, save it.
 
 Run on the Pi with the IMU fitted in the trunk and the robot in your hands (servos off):
 
@@ -56,16 +56,17 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--bus", type=int, default=1)
     p.add_argument("--address", type=lambda s: int(s, 0), default=0x68)
-    p.add_argument("--backend", choices=("mpu6050", "iio"), default="mpu6050",
-                   help="iio = RB3 Gen 2 onboard IMU (robot/imu_iio.py)")
+    p.add_argument("--backend", choices=("mpu6050", "qsh", "iio"), default="mpu6050",
+                   help="qsh = RB3 Gen 2 onboard ICM-42688 (robot/imu_qsh.py); iio = RealSense IMU (head)")
     p.add_argument("--no-save", action="store_true")
     args = p.parse_args()
 
     cfg = dict(m.DEFAULTS, bus=args.bus, address=args.address, axes="x,y,z", gyro_bias=[0, 0, 0], calibrate_seconds=0,
                backend=args.backend)
     imu = m.Imu(50, config=cfg, start_thread=False)
-    if args.backend == "iio":
+    if args.backend in ("qsh", "iio"):
         print(f"connected: {imu.dev.name}, {imu.dev.rates()[0]:g} / {imu.dev.rates()[1]:g} Hz")
+    if args.backend == "iio":
         print("WARNING: this is the RealSense's IMU on the HEAD: the walk can't use it (head moves)")
     else:
         print(f"connected: WHO_AM_I 0x{imu.dev.whoami:02x} ({m.KNOWN_WHOAMI.get(imu.dev.whoami, 'unknown')})")

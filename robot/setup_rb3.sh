@@ -27,6 +27,12 @@ command -v apt-get >/dev/null || {
 step "System packages"
 sudo apt-get update
 sudo apt-get install -y git curl python3-venv python3-dev build-essential i2c-tools bluez usbutils psmisc util-linux
+# RB3 onboard IMU (ICM-42688 on the sensor hub): Qualcomm's streaming tool, allowed its wake-alarm
+# timer so the walk can run it without sudo (robot/imu_qsh.py)
+if apt-cache show qcom-sensors-test-apps >/dev/null 2>&1; then
+  sudo apt-get install -y qcom-sensors-test-apps
+  sudo setcap cap_wake_alarm+ep /usr/bin/see_workhorse
+fi
 for g in dialout i2c input gpio; do
   if getent group "$g" >/dev/null && ! id -nG "$USER" | tr ' ' '\n' | grep -qx "$g"; then
     sudo usermod -aG "$g" "$USER"

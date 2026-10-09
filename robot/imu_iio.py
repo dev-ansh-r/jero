@@ -14,9 +14,8 @@ correction, tools/imu_tilt.py and the walk all work unchanged.
 
 Two ways to read, picked automatically:
   buffer  /dev/iio:deviceN streams every sample (~450/s from the hub); a read drains it and keeps the
-          newest: ~0.05 ms. Needs the buffers enabled as root at boot: robot/jero-imu-setup.sh via
-          jero-imu.service (tools/imu_rb3.py --install), which also stops iio-sensor-proxy (screen
-          rotation) so nothing else takes samples from the same buffer.
+          newest: ~0.05 ms. Needs the buffers enabled (scan_elements/*_en, buffer/enable) as root,
+          and nothing else (iio-sensor-proxy) reading the same buffer.
   sysfs   in_*_raw files: each value is a request to the sensor hub, ~14 ms for accel + gyro. Fallback.
 
 Conventions: HID sensors report gravity (board flat, face up: z = -1 g); the walk wants specific force
@@ -158,7 +157,7 @@ class _Triple:
             return True
         except OSError:
             log.warning(
-                "%s: can't set %g Hz (now %g Hz): run tools/imu_rb3.py --install once", self.dev.name, hz, self.rate()
+                "%s: can't set %g Hz (now %g Hz): needs root", self.dev.name, hz, self.rate()
             )
             return False
 

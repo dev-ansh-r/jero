@@ -61,10 +61,11 @@ def install_mpu6050(log) -> None:
     if cfg.get("backend") == "iio":
         sys.exit(
             f"{imu_mpu6050.CONFIG_PATH} uses the RealSense IMU (on the head, which moves): not a body IMU. "
-            "Calibrate the MPU9250 with tools/imu_check.py"
+            "Calibrate the body IMU: tools/imu_rb3.py --calibrate (RB3 onboard) or tools/imu_check.py (MPU9250)"
         )
     sys.modules["mini_bdx_runtime.raw_imu"] = imu_mpu6050
-    log.info("IMU: MPU6050 axes=%s (keep the robot still for 2 s at start: gyro bias)", cfg["axes"])
+    backend = {"qsh": "RB3 onboard ICM-42688"}.get(cfg.get("backend"), "MPU6050")
+    log.info("IMU: %s axes=%s (keep the robot still for 2 s at start: gyro bias)", backend, cfg["axes"])
 
 
 def parse_args():
