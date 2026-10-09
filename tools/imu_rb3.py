@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Test the RB3 Gen 2's onboard IMU, then calibrate it for the walk. Nothing moves; servos can be off.
 
-    python ~/Jero/tools/imu_rb3.py --install-udev   # once: 100 Hz at every boot (asks for sudo)
+    python ~/Jero/tools/imu_rb3.py --install        # once: stream the IMU at every boot (sudo)
     python ~/Jero/tools/imu_rb3.py                  # test: rate, gravity, gyro noise (board still)
     python ~/Jero/tools/imu_rb3.py --live           # watch the values while you tilt the robot
     python ~/Jero/tools/imu_rb3.py --calibrate      # mounting + gyro bias -> ~/.config/jero/imu.json
 
 The test checks (robot or board held still):
   rate      the sensor hub delivers >= 50 fresh samples/s (the walk runs at 50 Hz)
-  read      one accel+gyro read takes < 15 ms (it runs in the IMU thread, not the policy loop)
+  read      one accel+gyro read takes < 2 ms (buffer mode; sysfs mode is ~14 ms: run --install)
   gravity   |accel| is 9.8 m/s^2 +- 0.8 (scale and units right)
   gyro      still: bias < 0.05 rad/s and noise < 0.01 rad/s
 --calibrate is tools/imu_check.py --backend iio (4 guided poses), then run tools/imu_tilt.py on the
@@ -29,20 +29,32 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "robot"))
 import imu_iio
 
-UDEV_RULE = "/etc/udev/rules.d/99-jero-imu-rate.rules"
-RULES = """# Jero: RB3 Gen 2 onboard IMU at 100 Hz (default 10 Hz is too slow for the 50 Hz walk)
-ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="accel_3d", ATTR{in_accel_sampling_frequency}="100"
-ACTION=="add", SUBSYSTEM=="iio", ATTR{name}=="gyro_3d", ATTR{in_anglvel_sampling_frequency}="100"
-"""
+UNIT = ROOT / "robot" / "systemd" / "jero-imu.service"
+SETUP = ROOT / "robot" / "jero-imu-setup.sh"
+OLD_RULE = "/etc/udev/rules.d/99-jero-imu-rate.rules"  # earlier sysfs-only setup, replaced by the service
 
 
-def install_udev() -> int:
-    print(f"installing {UDEV_RULE} (sudo)")
-    ok = subprocess.run(["sudo", "tee", UDEV_RULE], input=RULES.encode(), stdout=subprocess.DEVNULL, check=False).returncode == 0
-    for name, kind in (("accel_3d", "accel"), ("gyro_3d", "anglvel")):  # and now, without a reboot
-        f = imu_iio.find_device(name) / f"in_{kind}_sampling_frequency"
-        ok &= subprocess.run(["sudo", "tee", str(f)], input=b"100\n", stdout=subprocess.DEVNULL, check=False).returncode == 0
-        print(f"  {name}: {f.read_text().strip()} Hz")
+def sh(*cmd: str) -> bool:
+    print("  $", " ".join(cmd))
+    return subprocess.run(cmd, check=False).returncode == 0
+
+
+def install() -> int:
+    """Stream the IMU at every boot: jero-imu.service runs robot/jero-imu-setup.sh (sudo)."""
+    ok = sh("sudo", "install", "-m", "755", str(SETUP), "/usr/local/bin/jero-imu-setup")
+    ok &= sh("sudo", "install", "-m", "644", str(UNIT), "/etc/systemd/system/jero-imu.service")
+    sh("sudo", "rm", "-f", OLD_RULE)
+    sh("sudo", "systemctl", "mask", "--now", "iio-sensor-proxy")  # screen rotation: not on a robot
+    ok &= sh("sudo", "systemctl", "daemon-reload")
+    ok &= sh("sudo", "systemctl", "enable", "--now", "jero-imu.service")
+    ok &= sh("sudo", "systemctl", "restart", "jero-imu.service")
+    subprocess.run(["journalctl", "-u", "jero-imu", "-n", "2", "--no-pager", "-o", "cat"], check=False)
+    print(
+        "installed: the onboard IMU streams at every boot (undo: sudo systemctl disable jero-imu;"
+        " sudo systemctl unmask iio-sensor-proxy)"
+        if ok
+        else "install FAILED (see above)"
+    )
     return 0 if ok else 1
 
 
@@ -74,7 +86,7 @@ def test(dev: imu_iio.IioImu, seconds: float) -> int:
         (
             "read",
             np.percentile(t_read, 95) < 0.015,
-            f"{np.mean(t_read) * 1000:.1f} ms mean, {np.percentile(t_read, 95) * 1000:.1f} ms p95 (want < 15)",
+            f"{np.mean(t_read) * 1000:.1f} ms mean, {np.percentile(t_read, 95) * 1000:.1f} ms p95 (want < 2)",
         ),
         ("gravity", 9.0 < g < 10.6, f"|a| = {g:.2f} m/s^2 (want 9.8 +- 0.8)"),
         ("gyro", bias < 0.05 and noise < 0.01, f"bias {bias:.4f} rad/s (< 0.05), noise {noise:.4f} (< 0.01)"),
@@ -82,8 +94,8 @@ def test(dev: imu_iio.IioImu, seconds: float) -> int:
     for name, ok, detail in checks:
         print(f"  [{'PASS' if ok else 'FAIL'}] {name}: {detail}")
     ok = all(c[1] for c in checks)
-    if dev.rates()[0] < 50:
-        print("  hint: rate is set below 50 Hz: run with --install-udev once")
+    if "sysfs" in dev.name:
+        print("  hint: IMU buffers not streaming: run with --install once")
     print("RESULT:", "ALL PASS. next: --calibrate" if ok else "FAILED (moved? rate too low? see above)")
     return 0 if ok else 1
 
@@ -116,14 +128,14 @@ def live(dev: imu_iio.IioImu) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--install-udev", action="store_true", help="100 Hz at every boot (sudo), then exit")
+    p.add_argument("--install", action="store_true", help="stream the IMU at every boot (sudo), then exit")
     p.add_argument("--live", action="store_true", help="print values continuously")
     p.add_argument("--calibrate", action="store_true", help="run tools/imu_check.py --backend iio")
     p.add_argument("--seconds", type=float, default=3.0)
     args = p.parse_args()
 
-    if args.install_udev:
-        return install_udev()
+    if args.install:
+        return install()
     if args.calibrate:
         return subprocess.call([sys.executable, str(ROOT / "tools" / "imu_check.py"), "--backend", "iio"])
     try:

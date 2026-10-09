@@ -67,3 +67,44 @@ def test_imu_uses_iio_backend_from_config(tmp_path, monkeypatch):
     imu = m.Imu(50, config=cfg, start_thread=False)
     d = imu.sample()
     assert d["accelero"][2] == pytest.approx(949 * 0.00980665) and d["gyro"][0] == pytest.approx(1525 * 1.745e-6)
+
+
+def add_buffer(root: Path, dev_dir: Path, n: int, kind: str, samples):
+    """Enable a fake IIO buffer: x,y,z (le:s32) + timestamp (le:s64) -> 24-byte scans."""
+    import struct
+
+    d = root / DEV.format(n)
+    se = d / "scan_elements"
+    se.mkdir()
+    for i, ch in enumerate((f"in_{kind}_x", f"in_{kind}_y", f"in_{kind}_z", "in_timestamp")):
+        (se / f"{ch}_en").write_text("1\n")
+        (se / f"{ch}_index").write_text(f"{i}\n")
+        (se / f"{ch}_type").write_text("le:s64/64>>0\n" if ch == "in_timestamp" else "le:s32/32>>0\n")
+    (d / "buffer").mkdir()
+    (d / "buffer" / "enable").write_text("1\n")
+    dev_dir.mkdir(exist_ok=True)
+    (dev_dir / DEV.format(n)).write_bytes(b"".join(struct.pack("<iiiiq", *s, 0, k) for k, s in enumerate(samples)))
+
+
+def test_buffer_layout_aligns_timestamp(tmp_path):
+    root = make_sysfs(tmp_path / "sys")
+    add_buffer(root, tmp_path / "dev", 0, "accel", [(1, 2, 3)])
+    size, layout = imu_iio.scan_layout(root / DEV.format(0))
+    assert size == 24 and layout["in_accel_z"][0] == 8 and layout["in_timestamp"][0] == 16
+
+
+def test_buffer_mode_returns_newest_sample_then_holds_it(tmp_path):
+    root = make_sysfs(tmp_path / "sys")
+    add_buffer(root, tmp_path / "dev", 0, "accel", [(0, 0, -900), (5, -6, -950)])
+    add_buffer(root, tmp_path / "dev", 1, "anglvel", [(10, 20, 30)])
+    dev = imu_iio.IioImu(root=root, dev_dir=tmp_path / "dev")
+    assert "buffer/buffer" in dev.name
+    a, g = dev.read_si()
+    assert a == pytest.approx(np.array([-5, 6, 950]) * 0.00980665)  # newest scan, gravity flipped
+    assert g == pytest.approx(np.array([10, 20, 30]) * 1.745e-6)
+    assert dev.read_si()[0] == pytest.approx(a)  # nothing new yet: same sample (not the slow sysfs)
+
+
+def test_no_buffer_falls_back_to_sysfs(tmp_path):
+    dev = imu_iio.IioImu(root=make_sysfs(tmp_path / "sys"), dev_dir=tmp_path / "nodev")
+    assert "sysfs/sysfs" in dev.name and dev.read_si()[0][2] == pytest.approx(949 * 0.00980665)
