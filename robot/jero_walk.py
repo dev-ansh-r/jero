@@ -59,7 +59,8 @@ def install_mpu6050(log) -> None:
         sys.exit(f"{imu_mpu6050.CONFIG_PATH} missing: run tools/imu_check.py once (measures the mounting)")
     imu_mpu6050.parse_axes(cfg["axes"])  # fail early on a bad file
     sys.modules["mini_bdx_runtime.raw_imu"] = imu_mpu6050
-    log.info("IMU: MPU6050 axes=%s (keep the robot still for 2 s at start: gyro bias)", cfg["axes"])
+    backend = "RB3 onboard (IIO)" if cfg.get("backend") == "iio" else "MPU6050"
+    log.info("IMU: %s axes=%s (keep the robot still for 2 s at start: gyro bias)", backend, cfg["axes"])
 
 
 def parse_args():

@@ -201,7 +201,12 @@ class Imu:
         self.sampling_freq = sampling_freq
         if upside_down:
             log.warning("imu_upside_down is ignored for the MPU6050: mounting is set by 'axes' (tools/imu_check.py)")
-        self.dev = Mpu6050(bus=bus, address=int(cfg["address"]), bus_number=int(cfg["bus"]))
+        if cfg.get("backend", "mpu6050") == "iio":  # RB3 Gen 2 onboard IMU (robot/imu_iio.py)
+            from imu_iio import IioImu
+
+            self.dev = IioImu(accel_sign=float(cfg.get("accel_sign", -1.0)))
+        else:
+            self.dev = Mpu6050(bus=bus, address=int(cfg["address"]), bus_number=int(cfg["bus"]))
         self.idx, self.sign = parse_axes(cfg["axes"])
         self.x_offset = 0.0  # same knob as upstream (accel x tare)
         self.accel_offset = np.asarray(cfg.get("accel_offset") or [0.0, 0.0, 0.0], float)
