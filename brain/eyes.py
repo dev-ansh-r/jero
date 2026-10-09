@@ -13,11 +13,12 @@ the numbers. Runs in its own environment (setup: robot/setup_vision.sh), next to
 --follow sends head poses over the Jero link (the walk must run with the link on and be unpaused);
 the walk keeps balancing, vision only moves the head.
 
-Show events: programs on the robot POST to http://127.0.0.1:8080/api/{say,caption,mode,photo}
-(brain/show_api.py; e.g. `python brain/show_api.py say "Hello!"`), and every open page shows them
-at once: speech bubble, banner captions, mode, a 3-2-1 photo countdown with the picture saved to
-~/jero-photos/. Viewers on the network can watch; only the robot itself can trigger (--allow-remote).
---react: the surprise sound when someone comes closer than 45 cm. Camera upside down? --rotate 180.
+Commands card: the page's buttons (capture image, say hi, dance, stop) POST /api/command. Capture is
+done here (3-2-1 on the feed, saved to ~/jero-photos/); the others go to brain/show.py, which speaks
+and moves the robot and posts what Jero said back (/api/say, robot only, brain/show_api.py).
+Path card: the walk sends commanded velocity + gyro yaw rate over UDP (robot/telemetry.py, port
+5006); the dashboard integrates it into the covered path (an estimate: commands, not measured steps).
+Camera upside down? --rotate 180.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ import logging
 import math
 import os
 import re
+import socket
 import sys
 import threading
 import time
@@ -288,14 +290,83 @@ class Events:
 
 PHOTO_NAME = re.compile(r"^jero-\d{8}-\d{6}(-\d+)?\.jpg$")
 EVENT_KINDS = ("say", "caption", "mode", "photo")
+COMMANDS = ("capture", "hi", "dance", "stop")  # the page's buttons; anyone viewing may press them
+
+
+class PathTracker:
+    """Covered path from walk telemetry: heading from the gyro (commanded turn rate if none),
+    position from the commanded velocity. An estimate: the robot may walk slower than commanded."""
+
+    def __init__(self, speed_scale: float = 1.0, min_step_m: float = 0.02, max_points: int = 3000):
+        self.speed_scale, self.min_step_m = speed_scale, min_step_m
+        self.lock = threading.Lock()
+        self.max_points = max_points
+        self.reset()
+
+    def reset(self) -> None:
+        with getattr(self, "lock", threading.Lock()):
+            self.x = self.y = self.heading = self.distance = 0.0
+            self.points = deque([(0.0, 0.0)], maxlen=self.max_points)
+            self.last_t = None
+            self.last_msg = 0.0
+            self.paused = True
+
+    def update(self, msg: dict, now: float | None = None) -> None:
+        t = float(msg.get("t", time.time()))
+        with self.lock:
+            self.last_msg = time.time() if now is None else now
+            self.paused = bool(msg.get("paused"))
+            dt = 0.0 if self.last_t is None else min(max(t - self.last_t, 0.0), 0.5)
+            self.last_t = t
+            if self.paused or dt == 0.0:
+                return
+            wz = msg.get("gz")
+            wz = float(msg.get("wz", 0.0)) if wz is None else float(wz)
+            self.heading += wz * dt
+            vx, vy = float(msg.get("vx", 0.0)) * self.speed_scale, float(msg.get("vy", 0.0)) * self.speed_scale
+            c, s_ = math.cos(self.heading), math.sin(self.heading)
+            dx, dy = (vx * c - vy * s_) * dt, (vx * s_ + vy * c) * dt
+            self.x += dx
+            self.y += dy
+            self.distance += math.hypot(dx, dy)
+            px, py = self.points[-1]
+            if math.hypot(self.x - px, self.y - py) >= self.min_step_m:
+                self.points.append((round(self.x, 3), round(self.y, 3)))
+
+    def state(self, max_points: int = 600, now: float | None = None) -> dict:
+        with self.lock:
+            pts = list(self.points) + [(round(self.x, 3), round(self.y, 3))]
+            step = max(1, len(pts) // max_points)
+            now = time.time() if now is None else now
+            return {
+                "points": pts[::step] + ([pts[-1]] if (len(pts) - 1) % step else []),
+                "pose": [round(self.x, 3), round(self.y, 3), round(self.heading, 3)],
+                "distance": round(self.distance, 2),
+                "live": now - self.last_msg < 1.0,
+                "paused": self.paused,
+            }
+
+
+def listen_telemetry(tracker: PathTracker, port: int = 5006, host: str = "127.0.0.1") -> threading.Thread:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind((host, port))
+
+    def loop():
+        while True:
+            data, _ = sock.recvfrom(2048)
+            try:
+                tracker.update(json.loads(data))
+            except (ValueError, TypeError) as exc:
+                log.debug("bad telemetry: %s", exc)
+
+    th = threading.Thread(target=loop, name="jero-telemetry-rx", daemon=True)
+    th.start()
+    log.info("path card: listening for walk telemetry on udp://%s:%d", host, port)
+    return th
 
 
 # -- the loop + shared state ----------------------------------------------------------------
 class Eyes:
-    CLOSE_M = 0.45  # "too close!" below this ...
-    REARM_M = 0.7  # ... once, until the target is back beyond this
-    CLOSE_COOLDOWN_S = 6.0
-
     def __init__(
         self,
         source,
@@ -303,19 +374,18 @@ class Eyes:
         follow: HeadFollow | None = None,
         client=None,
         photos_dir: Path | None = None,
-        on_close=None,
+        path: PathTracker | None = None,
         clock=time.monotonic,
     ):
         self.source, self.rotate, self.follow, self.client = source, rotate, follow, client
         self.k = source.k.rotated_180() if rotate == 180 else source.k
         self.photos_dir = Path(photos_dir or Path.home() / "jero-photos")
-        self.on_close, self.clock = on_close, clock
+        self.path, self.clock = path or PathTracker(), clock
         self.events = Events()
         self.cond = threading.Condition()
         self.seq = 0
         self.jpeg = {"color": b"", "depth": b""}
         self.last_color = None
-        self._close_armed, self._close_t = True, -1e9
         self.status = {
             "camera": source.name,
             "fps": 0.0,
@@ -344,7 +414,6 @@ class Eyes:
             head = self.follow.update(target)
             if self.client is not None:
                 self.client.head(**head)
-        self._check_close(target)
         cj, dj = render(color, depth, target)
         self._times.append(time.monotonic())
         fps = (len(self._times) - 1) / (self._times[-1] - self._times[0]) if len(self._times) > 1 else 0.0
@@ -368,18 +437,6 @@ class Eyes:
             self.cond.notify_all()
         return True
 
-    def _check_close(self, target: Target | None) -> None:
-        d = target.distance if target is not None else None
-        if d is not None and d < self.CLOSE_M:
-            now = self.clock()
-            if self._close_armed and now - self._close_t > self.CLOSE_COOLDOWN_S:
-                self._close_armed, self._close_t = False, now
-                self.events.push("close", distance=round(d, 2))
-                if self.on_close is not None:
-                    self.on_close(d)
-        elif d is None or d > self.REARM_M:
-            self._close_armed = True
-
     # -- show actions (from /api/*: the show controller, voice, a terminal) -----------------
     def say(self, text: str) -> dict:
         with self.cond:
@@ -388,6 +445,12 @@ class Eyes:
 
     def caption(self, text: str, seconds: float = 4.0, style: str = "info") -> dict:
         return self.events.push("caption", text=text, seconds=seconds, style=style)
+
+    def command(self, name: str) -> dict:
+        """A button on the page. Capture is done here; the rest is for brain/show.py."""
+        if name == "capture":
+            return self.photo(countdown=3)
+        return self.events.push("command", name=name)
 
     def set_mode(self, mode: str) -> dict:
         with self.cond:
@@ -444,6 +507,10 @@ class Eyes:
     def stop(self):
         self._running = False
 
+    def snapshot(self) -> dict:
+        with self.cond:
+            return {**self.status, "path": self.path.state()}
+
     def wait_frame(self, after: int, timeout: float = 2.0):
         with self.cond:
             self.cond.wait_for(lambda: self.seq > after, timeout=timeout)
@@ -471,9 +538,7 @@ def make_handler(eyes: Eyes, allow_remote: bool = False):
             if path in ("/", "/index.html"):
                 self._send(PAGE.read_bytes(), "text/html; charset=utf-8")
             elif path == "/status.json":
-                with eyes.cond:
-                    body = json.dumps(eyes.status).encode()
-                self._send(body, "application/json")
+                self._send(json.dumps(eyes.snapshot()).encode(), "application/json")
             elif path in ("/color.mjpg", "/depth.mjpg"):
                 self._stream(path[1:6])
             elif path in ("/color.jpg", "/depth.jpg"):
@@ -493,10 +558,11 @@ def make_handler(eyes: Eyes, allow_remote: bool = False):
                 self.send_error(404)
 
         def do_POST(self):
-            if not allow_remote and self.client_address[0] not in ("127.0.0.1", "::1"):
-                self._json({"error": "show actions only from the robot itself"}, 403)
-                return
             kind = self.path.split("?")[0].removeprefix("/api/")
+            local = self.client_address[0] in ("127.0.0.1", "::1")
+            if kind not in ("command", "path/reset") and not (allow_remote or local):
+                self._json({"error": "only the robot itself can post this"}, 403)
+                return
             try:
                 n = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(min(n, 8192)) or b"{}") if n else {}
@@ -504,7 +570,12 @@ def make_handler(eyes: Eyes, allow_remote: bool = False):
                 self._json({"error": "body must be JSON"}, 400)
                 return
             text = str(body.get("text", ""))[:300]
-            if kind == "say" and text:
+            if kind == "command" and body.get("name") in COMMANDS:
+                ev = eyes.command(body["name"])
+            elif kind == "path/reset":
+                eyes.path.reset()
+                ev = eyes.events.push("path_reset")
+            elif kind == "say" and text:
                 ev = eyes.say(text)
             elif kind == "caption" and text:
                 ev = eyes.caption(text, float(body.get("seconds", 4.0)), str(body.get("style", "info"))[:16])
@@ -513,7 +584,13 @@ def make_handler(eyes: Eyes, allow_remote: bool = False):
             elif kind == "photo":
                 ev = eyes.photo(int(body.get("countdown", 3)))
             else:
-                self._json({"error": "POST /api/say|caption|mode|photo with a JSON body"}, 400)
+                self._json(
+                    {
+                        "error": "POST /api/command {name: capture|hi|dance|stop}, /api/path/reset, "
+                        "/api/say|caption|mode|photo"
+                    },
+                    400,
+                )
                 return
             self._json(ev)
 
@@ -587,7 +664,8 @@ def main() -> int:
     p.add_argument("--rotate", type=int, default=0, choices=(0, 180))
     p.add_argument("--follow", action="store_true", help="turn the head toward the nearest target (Jero link)")
     p.add_argument("--dry-run", action="store_true", help="--follow: log head commands, don't send them")
-    p.add_argument("--react", action="store_true", help="play the surprise sound when someone gets too close")
+    p.add_argument("--telemetry-port", type=int, default=5006, help="walk telemetry (UDP) for the path card")
+    p.add_argument("--path-scale", type=float, default=1.0, help="path card: real speed / commanded speed")
     p.add_argument("--photos", default=str(Path.home() / "jero-photos"), help="where photos are saved")
     p.add_argument("--allow-remote", action="store_true", help="accept show actions (POST) from other machines")
     p.add_argument("--host", default="127.0.0.1", help="robot running jero_walk.py with the link on")
@@ -611,22 +689,18 @@ def main() -> int:
                 log.info("head yaw=%+.2f pitch=%+.2f", kw["head_yaw"], kw["head_pitch"])
 
         client = LogClient()
-    on_close = None
-    if args.react:
-        from expressions import Speaker
-
-        speaker = Speaker()
-
-        def on_close(d):
-            speaker.play("surprise")
-
+    path = PathTracker(speed_scale=args.path_scale)
+    try:
+        listen_telemetry(path, args.telemetry_port)
+    except OSError as exc:
+        log.warning("path card off: can't listen on udp %d (%s)", args.telemetry_port, exc)
     eyes = Eyes(
         source,
         rotate=args.rotate,
         follow=HeadFollow() if args.follow else None,
         client=client,
         photos_dir=Path(args.photos).expanduser(),
-        on_close=on_close,
+        path=path,
     )
     threading.Thread(target=eyes.run, name="jero-eyes", daemon=True).start()
 

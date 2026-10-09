@@ -108,6 +108,11 @@ def parse_args():
     p.add_argument("--no-xbox", action="store_true", help="don't require a paired gamepad")
     p.add_argument("--pad", choices=("auto", "xbox", "ps4"), default="auto", help="gamepad layout (auto: by name)")
     p.add_argument("--no-link", action="store_true", help="disable the Wi-Fi command link")
+    p.add_argument(
+        "--telemetry",
+        default=os.environ.get("JERO_TELEMETRY", "127.0.0.1:5006"),
+        help="host:port for the dashboard's path card (UDP, 10 Hz); 'none' = off",
+    )
     p.add_argument("--link-port", type=int, default=5005)
     p.add_argument("--link-bind", default="0.0.0.0")
     p.add_argument("--link-key", default=str(DEFAULT_KEY), help="hex key file; 'none' = unsigned (bench only)")
@@ -225,6 +230,11 @@ def main():
 
     rl.xbox_controller = MuxController(xbox=xbox, link=link)
     rl.commands = True
+    if args.telemetry != "none":
+        import telemetry
+
+        host, _, port = args.telemetry.rpartition(":")
+        telemetry.start(rl, (host or "127.0.0.1", int(port)))
     try:
         rl.run()
     finally:

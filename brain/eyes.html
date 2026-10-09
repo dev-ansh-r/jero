@@ -21,40 +21,46 @@
   @keyframes pulse { 50% { opacity: .35; } }
   .mode { font: 600 12px ui-monospace, Consolas, monospace; letter-spacing: .12em; text-transform: uppercase;
     color: var(--accent); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
-  .tabs { display: flex; gap: 4px; margin-left: 8px; }
-  .tabs a { font: 600 12px ui-monospace, Consolas, monospace; letter-spacing: .12em; text-transform: uppercase;
-    color: var(--dim); text-decoration: none; padding: 5px 10px; border-radius: 6px; border: 1px solid transparent; }
-  .tabs a[aria-current="page"] { color: var(--text); border-color: var(--line); background: var(--panel); }
-  .tabs a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   header .spacer { flex: 1; }
   header .meta { color: var(--dim); font: 13px ui-monospace, Consolas, monospace; }
-  .show { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px 20px; }
-  main[hidden] { display: none; }
-  .says p { margin: 0; padding: 18px 18px 22px; font-size: 40px; line-height: 1.25; min-height: 1.25em; }
-  .says p.idle { color: var(--dim); }
   main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; padding: 16px 20px; }
+  .left { display: grid; gap: 16px; align-content: start; min-width: 0; }
   .feeds { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-content: start; }
+  .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
   .card h2 { margin: 0; padding: 10px 14px; font: 600 12px ui-monospace, Consolas, monospace; letter-spacing: .12em;
-    color: var(--dim); text-transform: uppercase; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
-  .feed { transition: border-color .2s; }
-  .feed.close { border-color: var(--hot); }
+    color: var(--dim); text-transform: uppercase; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .feed img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
-  .ribbon { position: fixed; left: 0; right: 0; top: 0; z-index: 15; padding: 14px 20px; font-weight: 700; font-size: 24px;
-    background: var(--accent); color: var(--bg); transform: translateY(-110%); transition: transform .2s ease-out; }
-  .ribbon.show { transform: translateY(0); }
-  .ribbon.warn { background: var(--hot); color: #fff; }
-  .ribbon.party { background: var(--warm); }
-  .ribbon.system { background: var(--line); color: var(--text); }
-  .count { position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; pointer-events: none; opacity: 0;
-    font: 700 220px/1 ui-monospace, Consolas, monospace; color: #fff; text-shadow: 0 4px 40px rgba(0,0,0,.7); }
-  .count.show { opacity: 1; }
-  .flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 20; }
-  .flash.go { animation: flash .6s ease-out; }
-  @keyframes flash { from { opacity: .9; } to { opacity: 0; } }
   .legend { display: flex; align-items: center; gap: 8px; padding: 8px 14px; color: var(--dim); font-size: 12px; }
   .legend .bar { flex: 1; height: 8px; border-radius: 4px;
     background: linear-gradient(90deg, #7a0403, #fb8022, #a4fc3b, #1ae4b6, #4686fb, #30123b); }
+
+  /* capture effect on the colour feed: 3-2-1, shutter closes and opens, flash */
+  .shot { position: relative; overflow: hidden; }
+  .count { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; opacity: 0;
+    font: 700 150px/1 ui-monospace, Consolas, monospace; color: #fff; text-shadow: 0 4px 30px rgba(0,0,0,.7); }
+  .count.show { opacity: 1; animation: tick 1s ease-out; }
+  @keyframes tick { from { transform: scale(1.25); opacity: 0; } 25% { opacity: 1; } to { transform: scale(1); } }
+  .shutter { position: absolute; left: 0; right: 0; height: 50%; background: #000; pointer-events: none; transform: scaleY(0); }
+  .shutter.top { top: 0; transform-origin: top; }
+  .shutter.bottom { bottom: 0; transform-origin: bottom; }
+  .shot.snap .shutter { animation: shutter .38s ease-in-out; }
+  @keyframes shutter { 0%, 100% { transform: scaleY(0); } 45%, 55% { transform: scaleY(1); } }
+  .shot .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  .shot.snap .flash { animation: flash .7s ease-out .18s; }
+  @keyframes flash { from { opacity: .95; } to { opacity: 0; } }
+  .corners { position: absolute; inset: 10px; pointer-events: none; opacity: 0; transition: opacity .2s;
+    background:
+      linear-gradient(var(--accent), var(--accent)) top left / 28px 3px no-repeat,
+      linear-gradient(var(--accent), var(--accent)) top left / 3px 28px no-repeat,
+      linear-gradient(var(--accent), var(--accent)) top right / 28px 3px no-repeat,
+      linear-gradient(var(--accent), var(--accent)) top right / 3px 28px no-repeat,
+      linear-gradient(var(--accent), var(--accent)) bottom left / 28px 3px no-repeat,
+      linear-gradient(var(--accent), var(--accent)) bottom left / 3px 28px no-repeat,
+      linear-gradient(var(--accent), var(--accent)) bottom right / 28px 3px no-repeat,
+      linear-gradient(var(--accent), var(--accent)) bottom right / 3px 28px no-repeat; }
+  .shot.aim .corners { opacity: 1; }
+
   aside { display: grid; gap: 16px; align-content: start; }
   .big { padding: 16px 14px 18px; }
   .big .label { color: var(--dim); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
@@ -67,33 +73,53 @@
   .stat .k { color: var(--dim); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
   .stat .v { font: 600 20px ui-monospace, Consolas, monospace; margin-top: 2px; }
   canvas { display: block; width: 100%; height: auto; }
-  .photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; padding: 12px; }
-  .photos button { padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #000; cursor: pointer; }
-  .photos button:focus-visible, .modal button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .photos img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
-  .photos .empty { grid-column: 1 / -1; color: var(--dim); font-size: 13px; padding: 4px; }
-  .log { list-style: none; margin: 0; padding: 8px 14px 12px; font: 12px/1.6 ui-monospace, Consolas, monospace; color: var(--dim); }
-  .log li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .log li b { color: var(--text); font-weight: 600; }
+
+  /* commands */
+  .cmds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; }
+  .btn { font: 600 12px ui-monospace, Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--text);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 14px 10px; cursor: pointer; transition: border-color .15s, color .15s; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn:focus-visible, .mini:focus-visible, .modal button:focus-visible, .last:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn.primary { grid-column: 1 / -1; border-color: var(--accent); color: var(--accent); }
+  .btn.stop { color: var(--hot); }
+  .btn.stop:hover { border-color: var(--hot); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .last { display: none; margin: 0 12px 12px; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #000; cursor: pointer; }
+  .last.has { display: block; }
+  .last img { display: block; width: 100%; height: 72px; object-fit: cover; }
+  .mini { font: 600 11px ui-monospace, Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--dim);
+    background: none; border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; cursor: pointer; }
+  .mini:hover { color: var(--text); }
+
+  /* jero says */
+  .says p { margin: 0; padding: 14px 14px 6px; font-size: 22px; line-height: 1.3; }
+  .says p.idle { color: var(--dim); font-size: 15px; }
+  .says ul { list-style: none; margin: 0; padding: 4px 14px 14px; color: var(--dim); font-size: 13px; }
+  .says li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* path */
+  .path .meta { display: flex; justify-content: space-between; padding: 8px 14px 12px; color: var(--dim); font: 12px ui-monospace, Consolas, monospace; }
+
   .modal { position: fixed; inset: 0; display: none; place-items: center; background: rgba(10,13,18,.9); z-index: 10; padding: 20px; }
   .modal.show { display: grid; }
   .modal figure { margin: 0; text-align: center; }
   .modal img { max-width: min(92vw, 1100px); max-height: 78vh; border-radius: 12px; border: 1px solid var(--line); }
+  .modal.show img { animation: develop .6s ease-out; }
+  @keyframes develop { from { transform: scale(.92); filter: brightness(2.2) saturate(0); } to { transform: scale(1); filter: none; } }
   .modal figcaption { color: var(--dim); font: 14px ui-monospace, Consolas, monospace; margin-top: 10px; }
   .modal button { margin-top: 10px; font: 600 13px ui-monospace, Consolas, monospace; color: var(--text); background: var(--panel);
     border: 1px solid var(--line); border-radius: 8px; padding: 8px 16px; cursor: pointer; }
   .offline { position: fixed; inset: auto 16px 16px auto; background: var(--hot); color: #fff; padding: 8px 14px;
     border-radius: 8px; font-weight: 600; display: none; }
+  @media (max-width: 1280px) { .row { grid-template-columns: 1fr 1fr; } .row .path { grid-column: 1 / -1; } }
   @media (max-width: 980px) {
     main { grid-template-columns: 1fr; padding: 16px; }
     header { padding: 12px 16px; flex-wrap: wrap; }
-    .show { padding: 16px; }
   }
   @media (max-width: 640px) {
-    .feeds { grid-template-columns: 1fr; }
+    .feeds, .row { grid-template-columns: 1fr; }
     .big .value { font-size: 44px; }
-    .says p { font-size: 26px; }
-    .count { font-size: 110px; }
+    .count { font-size: 100px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -105,27 +131,51 @@
   <div class="brand"><b>JERO</b> · VISION</div>
   <span class="live"><span class="dot" id="dot"></span><span id="liveText">connecting…</span></span>
   <span class="mode" id="mode">standby</span>
-  <nav class="tabs" aria-label="Views">
-    <a href="#vision" id="tabVision">Vision</a>
-    <a href="#show" id="tabShow">Show</a>
-  </nav>
   <span class="spacer"></span>
   <span class="meta" id="camera">—</span>
 </header>
-<main id="vision">
-  <section class="feeds">
-    <div class="card feed" id="feed">
-      <h2><span>What Jero sees</span><span id="fps">— fps</span></h2>
-      <div class="shot">
-        <img data-stream="/color.mjpg" alt="Colour camera">
+<main>
+  <div class="left">
+    <section class="feeds">
+      <div class="card feed">
+        <h2><span>What Jero sees</span><span id="fps">— fps</span></h2>
+        <div class="shot" id="shot">
+          <img data-stream="/color.mjpg" alt="Colour camera">
+          <div class="corners"></div>
+          <div class="count" id="count" aria-hidden="true"></div>
+          <div class="shutter top"></div><div class="shutter bottom"></div>
+          <div class="flash"></div>
+        </div>
       </div>
-    </div>
-    <div class="card feed">
-      <h2><span>Depth</span><span>0 – 4 m</span></h2>
-      <img data-stream="/depth.mjpg" alt="Depth heatmap">
-      <div class="legend"><span>near</span><span class="bar"></span><span>far</span></div>
-    </div>
-  </section>
+      <div class="card feed">
+        <h2><span>Depth</span><span>0 – 4 m</span></h2>
+        <img data-stream="/depth.mjpg" alt="Depth heatmap">
+        <div class="legend"><span>near</span><span class="bar"></span><span>far</span></div>
+      </div>
+    </section>
+    <section class="row">
+      <div class="card">
+        <h2><span>Commands</span><span id="cmdState"></span></h2>
+        <div class="cmds">
+          <button type="button" class="btn primary" data-cmd="capture">Capture image</button>
+          <button type="button" class="btn" data-cmd="hi">Say hi</button>
+          <button type="button" class="btn" data-cmd="dance">Wanna see a dance?</button>
+          <button type="button" class="btn stop" data-cmd="stop" style="grid-column: 1 / -1">Stop</button>
+        </div>
+        <button type="button" class="last" id="last" aria-label="Show the last picture"><img id="lastImg" alt="Last picture"></button>
+      </div>
+      <div class="card says">
+        <h2><span>Jero says</span></h2>
+        <p id="say" class="idle">nothing yet</p>
+        <ul id="sayHistory"></ul>
+      </div>
+      <div class="card path">
+        <h2><span>Path covered</span><button type="button" class="mini" id="resetPath">reset</button></h2>
+        <canvas id="path" width="640" height="420" aria-label="Path the robot walked, seen from above"></canvas>
+        <div class="meta"><span id="pathDist">0.00 m walked</span><span id="pathState">walk not running</span></div>
+      </div>
+    </section>
+  </div>
   <aside>
     <div class="card big">
       <div class="label">Nearest</div>
@@ -147,35 +197,18 @@
     </div>
   </aside>
 </main>
-<main id="show" class="show" hidden>
-  <section class="card says">
-    <h2><span>Jero says</span></h2>
-    <p id="say" class="idle">—</p>
-  </section>
-  <section class="card">
-    <h2><span>Photos</span><span id="nphotos">0</span></h2>
-    <div class="photos" id="photos"><span class="empty">photos Jero takes appear here</span></div>
-  </section>
-  <section class="card">
-    <h2><span>Log</span></h2>
-    <ul class="log" id="log"></ul>
-  </section>
-</main>
-<div class="ribbon" id="ribbon" role="status" aria-live="polite"></div>
-<div class="count" id="count" aria-hidden="true"></div>
-<div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Photo">
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Picture">
   <figure>
-    <img id="modalImg" alt="Photo taken by Jero">
+    <img id="modalImg" alt="Picture taken by Jero">
     <figcaption id="modalCap"></figcaption>
     <button type="button" id="modalClose">close</button>
   </figure>
 </div>
-<div class="flash" id="flash"></div>
 <div class="offline" id="offline">camera offline — retrying</div>
 <script>
 const $ = id => document.getElementById(id);
 const canvas = $("radar"), ctx = canvas.getContext("2d");
-let state = null, sweep = 0, lastOk = 0, closeUntil = 0, ribbonTimer = null, modalTimer = null, nPhotos = 0;
+let state = null, sweep = 0, lastOk = 0, modalTimer = null, lastPhoto = null;
 
 function distColor(d) { return d < 0.5 ? "var(--hot)" : d < 1.0 ? "var(--warm)" : "var(--accent)"; }
 
@@ -192,8 +225,7 @@ async function poll() {
     if (t) {
       $("dist").innerHTML = `${t.distance.toFixed(2)}<small>m</small>`;
       $("dist").style.color = distColor(t.distance);
-      const side = Math.abs(t.yaw_deg) < 5 ? "straight ahead" : `${Math.abs(t.yaw_deg).toFixed(0)}° ${t.yaw_deg > 0 ? "left" : "right"}`;
-      $("where").textContent = t.distance < 0.5 ? `very close! ${side}` : side;
+      $("where").textContent = Math.abs(t.yaw_deg) < 5 ? "straight ahead" : `${Math.abs(t.yaw_deg).toFixed(0)}° ${t.yaw_deg > 0 ? "left" : "right"}`;
       $("yaw").textContent = `${t.yaw_deg > 0 ? "+" : ""}${t.yaw_deg.toFixed(0)}°`;
       $("pitch").textContent = `${t.pitch_deg > 0 ? "+" : ""}${t.pitch_deg.toFixed(0)}°`;
     } else {
@@ -204,65 +236,105 @@ async function poll() {
     }
     $("follow").textContent = state.follow ? (state.head ? `${(state.head.head_yaw * 57.3).toFixed(0)}°` : "on") : "off";
     $("obs").textContent = state.radar.length;
+    drawPath(state.path);
   } catch (e) { /* offline banner below */ }
   setTimeout(poll, 200);
 }
 
-/* -- show events from the robot: say, caption, mode, photo, too close ------------------- */
-function logLine(label, text = "") {
-  const li = document.createElement("li"), b = document.createElement("b");
-  b.textContent = label;
-  li.append(new Date().toLocaleTimeString([], { hour12: false }) + " ", b, text);
-  $("log").prepend(li);
-  while ($("log").children.length > 6) $("log").lastChild.remove();
+/* -- commands ------------------------------------------------------------------------- */
+async function command(name) {
+  $("cmdState").textContent = name === "capture" ? "capturing…" : name === "stop" ? "stopping" : "sent";
+  try {
+    const r = await fetch("/api/command", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+    if (!r.ok) throw new Error(r.status);
+  } catch (e) { $("cmdState").textContent = "failed"; }
+  setTimeout(() => { $("cmdState").textContent = ""; }, 2500);
 }
-function ribbon(text, style = "info", seconds = 4) {
-  const r = $("ribbon");
-  r.textContent = text;
-  r.className = `ribbon show ${style}`;
-  clearTimeout(ribbonTimer);
-  ribbonTimer = setTimeout(() => r.classList.remove("show"), seconds * 1000);
-}
-function countdown(n) {
-  const c = $("count"), f = $("flash");
+document.querySelectorAll("[data-cmd]").forEach(b => { b.onclick = () => command(b.dataset.cmd); });
+$("resetPath").onclick = () => fetch("/api/path/reset", { method: "POST", body: "{}" });
+
+function capture(n) {
+  const shot = $("shot"), c = $("count"), cap = document.querySelector("[data-cmd=capture]");
+  cap.disabled = true;
+  shot.classList.add("aim");
   const tick = k => {
-    if (k <= 0) { c.classList.remove("show"); f.classList.remove("go"); void f.offsetWidth; f.classList.add("go"); return; }
-    c.textContent = k; c.classList.add("show");
+    if (k <= 0) {
+      c.classList.remove("show");
+      shot.classList.remove("snap"); void shot.offsetWidth; shot.classList.add("snap");
+      setTimeout(() => { shot.classList.remove("aim", "snap"); cap.disabled = false; }, 900);
+      return;
+    }
+    c.textContent = k; c.classList.remove("show"); void c.offsetWidth; c.classList.add("show");
     setTimeout(() => tick(k - 1), 1000);
   };
   tick(n);
 }
-function addPhoto(p, front = true) {
-  const box = $("photos");
-  box.querySelector(".empty")?.remove();
-  const b = document.createElement("button"), img = document.createElement("img");
-  b.type = "button"; b.title = p.name;
-  img.src = p.url; img.alt = p.name; img.loading = "lazy";
-  b.append(img);
-  b.onclick = () => showPhoto(p, false);
-  front ? box.prepend(b) : box.append(b);
-  while (box.children.length > 24) box.lastChild.remove();
-  $("nphotos").textContent = ++nPhotos;
-}
 function showPhoto(p, fresh) {
   $("modalImg").src = p.url;
   $("modalCap").textContent = `saved · ${p.name}`;
+  $("modal").classList.remove("show"); void $("modal").offsetWidth;
   $("modal").classList.add("show");
   $("modalClose").focus();
   clearTimeout(modalTimer);
-  if (fresh) modalTimer = setTimeout(closePhoto, 8000);
+  if (fresh) modalTimer = setTimeout(closePhoto, 10000);
 }
 function closePhoto() { $("modal").classList.remove("show"); }
 $("modalClose").onclick = closePhoto;
 $("modal").onclick = e => { if (e.target === $("modal")) closePhoto(); };
+$("last").onclick = () => lastPhoto && showPhoto(lastPhoto, false);
+function setLast(p) { lastPhoto = p; $("lastImg").src = p.url; $("last").classList.add("has"); }
+
+function said(text) {
+  const p = $("say");
+  if (!p.classList.contains("idle") && p.textContent) {
+    const li = document.createElement("li");
+    li.textContent = p.textContent;
+    $("sayHistory").prepend(li);
+    while ($("sayHistory").children.length > 3) $("sayHistory").lastChild.remove();
+  }
+  p.classList.remove("idle");
+  p.textContent = text;
+}
 
 function handle(ev) {
-  if (ev.type === "say") { $("say").classList.remove("idle"); $("say").textContent = ev.text; logLine("say ", ev.text); }
-  else if (ev.type === "caption") { ribbon(ev.text, ev.style, ev.seconds); logLine("caption ", ev.text); }
-  else if (ev.type === "mode") { $("mode").textContent = ev.mode; $("mode").dataset.set = "1"; logLine("mode ", ev.mode); }
-  else if (ev.type === "countdown") { countdown(ev.seconds); logLine("photo ", ev.seconds ? `in ${ev.seconds} s` : "now"); }
-  else if (ev.type === "photo") { addPhoto(ev); showPhoto(ev, true); logLine("saved ", ev.name); }
-  else if (ev.type === "close") { closeUntil = performance.now() + 2500; ribbon("Too close!", "warn", 2.5); logLine("too close ", `${ev.distance.toFixed(2)} m`); }
+  if (ev.type === "say") said(ev.text);
+  else if (ev.type === "mode") { $("mode").textContent = ev.mode; $("mode").dataset.set = "1"; }
+  else if (ev.type === "countdown") capture(ev.seconds);
+  else if (ev.type === "photo") { setTimeout(() => { setLast(ev); showPhoto(ev, true); }, 500); }
+}
+
+/* -- path covered (from the walk's telemetry; x forward = up, y left = left) ----------- */
+const pc = $("path"), pctx = pc.getContext("2d");
+function drawPath(p) {
+  if (!p) return;
+  const W = pc.width, H = pc.height, pad = 30;
+  const css = getComputedStyle(document.documentElement);
+  const line = css.getPropertyValue("--line"), dim = css.getPropertyValue("--dim"), acc = css.getPropertyValue("--accent");
+  const pts = p.points;
+  let minX = 0, maxX = 0, minY = 0, maxY = 0;
+  for (const [x, y] of pts) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+  const span = Math.max(1, maxX - minX, maxY - minY) * 1.2;
+  const s = Math.min(W, H) / span * 0.9;
+  const cx = (minY + maxY) / 2, cy = (minX + maxX) / 2;
+  const X = y => W / 2 - (y - cx) * s, Y = x => H / 2 - (x - cy) * s;
+  pctx.clearRect(0, 0, W, H);
+  const stepM = span > 6 ? 1 : 0.5;
+  pctx.strokeStyle = line; pctx.lineWidth = 1;
+  for (let g = Math.floor((cy - span) / stepM) * stepM; g <= cy + span; g += stepM) { pctx.beginPath(); pctx.moveTo(0, Y(g)); pctx.lineTo(W, Y(g)); pctx.stroke(); }
+  for (let g = Math.floor((cx - span) / stepM) * stepM; g <= cx + span; g += stepM) { pctx.beginPath(); pctx.moveTo(X(g), 0); pctx.lineTo(X(g), H); pctx.stroke(); }
+  pctx.fillStyle = dim; pctx.font = "18px ui-monospace, Consolas, monospace";
+  pctx.fillText(`grid ${stepM} m`, 10, H - 10);
+  pctx.strokeStyle = acc; pctx.lineWidth = 3; pctx.lineJoin = "round";
+  pctx.beginPath();
+  pts.forEach(([x, y], i) => i ? pctx.lineTo(X(y), Y(x)) : pctx.moveTo(X(y), Y(x)));
+  pctx.stroke();
+  pctx.fillStyle = dim; pctx.beginPath(); pctx.arc(X(0), Y(0), 6, 0, 2 * Math.PI); pctx.fill();
+  const [x, y, th] = p.pose;
+  pctx.save(); pctx.translate(X(y), Y(x)); pctx.rotate(-th);
+  pctx.fillStyle = acc; pctx.beginPath(); pctx.moveTo(0, -16); pctx.lineTo(-10, 10); pctx.lineTo(10, 10); pctx.closePath(); pctx.fill();
+  pctx.restore();
+  $("pathDist").textContent = `${p.distance.toFixed(2)} m walked`;
+  $("pathState").textContent = !p.live ? "walk not running" : p.paused ? "paused" : "walking";
 }
 
 function drawRadar() {
@@ -300,7 +372,6 @@ function drawRadar() {
   $("dot").classList.toggle("on", live);
   $("liveText").textContent = live ? "live" : "offline";
   $("offline").style.display = live || !lastOk ? "none" : "block";
-  $("feed").classList.toggle("close", performance.now() < closeUntil);
   requestAnimationFrame(drawRadar);
 }
 
@@ -310,20 +381,10 @@ addEventListener("load", () => {
   const es = new EventSource("/api/events");
   es.onmessage = m => { try { handle(JSON.parse(m.data)); } catch (e) { console.warn(e); } };
 });
-fetch("/api/photos").then(r => r.json()).then(list => list.forEach(p => addPhoto(p, false))).catch(() => {});
-function route() {
-  const show = location.hash === "#show";
-  $("vision").hidden = show;
-  $("show").hidden = !show;
-  $("tabVision").toggleAttribute("aria-current", !show);
-  $("tabShow").toggleAttribute("aria-current", show);
-  if (!show) $("tabVision").setAttribute("aria-current", "page"); else $("tabShow").setAttribute("aria-current", "page");
-}
-addEventListener("hashchange", route);
-route();
+fetch("/api/photos").then(r => r.json()).then(list => { if (list[0]) setLast(list[0]); }).catch(() => {});
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") closePhoto();
-  if (e.key.toLowerCase() === "f" && !e.ctrlKey && !e.metaKey) {
+  if (e.key.toLowerCase() === "f" && !e.ctrlKey && !e.metaKey && e.target === document.body) {
     document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.();
   }
 });

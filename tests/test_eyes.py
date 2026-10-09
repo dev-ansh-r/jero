@@ -210,20 +210,24 @@ def test_bad_posts_are_rejected(tmp_path):
     assert not e.events.items
 
 
-def test_too_close_fires_once_until_they_step_back():
-    clock, hits = Clock(), []
-    src = Fast(dist=0.3)
-    e = eyes.Eyes(src, on_close=hits.append, clock=clock)
-    for _ in range(5):
-        e.step()
-        clock.t += 1.0
-    assert len(hits) == 1 and hits[0] == pytest.approx(0.3, abs=0.02)
-    src.dist = 1.5  # steps back ...
+def test_command_buttons_any_viewer_but_say_only_from_the_robot(tmp_path):
+    e = eyes.Eyes(Fast(), photos_dir=tmp_path)
     e.step()
-    clock.t += 10
-    src.dist = 0.35  # ... and comes close again
-    e.step()
-    assert len(hits) == 2 and [ev["type"] for ev in e.events.items] == ["close", "close"]
+    assert e.command("hi")["name"] == "hi" and e.command("capture")["type"] == "countdown"
+    server, base = serve(e)
+    try:
+        req = urllib.request.Request(base + "/api/command", data=b'{"name": "dance"}', method="POST")
+        assert json.loads(urllib.request.urlopen(req, timeout=5).read())["name"] == "dance"
+        req = urllib.request.Request(base + "/api/command", data=b'{"name": "self_destruct"}', method="POST")
+        with pytest.raises(urllib.error.HTTPError):
+            urllib.request.urlopen(req, timeout=5)
+        req = urllib.request.Request(base + "/api/path/reset", data=b"{}", method="POST")
+        assert json.loads(urllib.request.urlopen(req, timeout=5).read())["type"] == "path_reset"
+        st = json.loads(urllib.request.urlopen(base + "/status.json", timeout=5).read())
+        assert st["path"]["distance"] == 0 and "points" in st["path"]
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_show_api_survives_no_dashboard():
