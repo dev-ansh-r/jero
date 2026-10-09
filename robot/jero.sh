@@ -8,10 +8,8 @@
 # 3. checks the IMU calibration, the link key and start_paused;
 # 4. runs robot/jero_walk.py with the arguments that walked on the Pi (+ --board other on non-Pi),
 #    Wi-Fi link on (voice commands + tools/estop.py), output also saved under ~/jero-logs/;
-# 5. on non-Pi boards, gives the walk real-time priority on the fastest core if passwordless sudo
-#    allows it (speech and the camera share the CPU on the RB3). On a Pi it runs exactly as it
-#    walked (normal priority); JERO_BOOST=1 forces the boost, JERO_BOOST=0 turns it off.
-# JERO_PAD_WAIT_S=0 waits for the pad forever (the autostart service, robot/systemd/jero-demo.service).
+# 5. gives the walk real-time priority on the fastest core if passwordless sudo allows it
+#    (speech and the camera share the CPU on the RB3).
 # Cross (X) starts/pauses, left stick walks, right stick turns, Ctrl+C stops.
 set -euo pipefail
 
@@ -29,9 +27,7 @@ PY="$VENV/bin/python"
 
 # -- board ----------------------------------------------------------------------------------
 board_args=()
-boost_default=1
 if grep -q "Raspberry Pi" /proc/device-tree/model 2>/dev/null; then
-  boost_default=0
   say "board: $(tr -d '\0' </proc/device-tree/model)"
 else
   board_args=(--board other)
@@ -61,16 +57,11 @@ fi
 
 # -- gamepad --------------------------------------------------------------------------------
 if [ ! -e /dev/input/js0 ]; then
-  if [ "$PAD_WAIT_S" = 0 ]; then
-    say "waiting for the PS4 pad: press its PS button"
-    until [ -e /dev/input/js0 ]; do sleep 1; done
-  else
-    say "waiting up to ${PAD_WAIT_S}s for the PS4 pad: press its PS button"
-    for _ in $(seq 1 "$PAD_WAIT_S"); do
-      [ -e /dev/input/js0 ] && break
-      sleep 1
-    done
-  fi
+  say "waiting up to ${PAD_WAIT_S}s for the PS4 pad: press its PS button"
+  for _ in $(seq 1 "$PAD_WAIT_S"); do
+    [ -e /dev/input/js0 ] && break
+    sleep 1
+  done
 fi
 [ -e /dev/input/js0 ] || die "no pad (/dev/input/js0). Check: bluetoothctl show | grep Powered; sudo btmgmt info"
 say "pad connected"
@@ -108,6 +99,6 @@ boost() {
 mkdir -p "$LOG_DIR"
 log="$LOG_DIR/walk-$(date +%Y%m%d-%H%M%S).log"
 say "log: $log"
-if [ "${JERO_BOOST:-$boost_default}" = 1 ]; then boost & fi
+boost &
 exec > >(tee -a "$log") 2>&1
 exec "$PY" "$REPO/robot/jero_walk.py" "${board_args[@]}" --imu mpu6050 --serial-port "$port" "$@"
