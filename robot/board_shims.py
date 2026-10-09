@@ -114,12 +114,16 @@ def make_feet(backend: str, chip: str | None = None, lines: tuple[int, int] | No
     raise SystemExit(f"unknown feet backend {backend!r}")
 
 
+def install_feet(feet: str = "none", chip: str | None = None, lines: tuple[int, int] | None = None) -> None:
+    """Replace only upstream's feet_contacts (used on the Pi too: Jero has no foot switches)."""
+    sys.modules["mini_bdx_runtime.feet_contacts"] = _module(
+        "mini_bdx_runtime.feet_contacts", FeetContacts=make_feet(feet, chip, lines)
+    )
+
+
 def install(feet: str = "none", chip: str | None = None, lines: tuple[int, int] | None = None) -> None:
     """Replace upstream's Pi-only modules. Call before importing v2_rl_walk_mujoco."""
-    feet_cls = make_feet(feet, chip, lines)
-    sys.modules["mini_bdx_runtime.feet_contacts"] = _module(
-        "mini_bdx_runtime.feet_contacts", FeetContacts=feet_cls
-    )
+    install_feet(feet, chip, lines)
     sys.modules["mini_bdx_runtime.eyes"] = _module("mini_bdx_runtime.eyes", Eyes=_unavailable("Eyes"))
     sys.modules["mini_bdx_runtime.antennas"] = _module(
         "mini_bdx_runtime.antennas", Antennas=_unavailable("Antennas")

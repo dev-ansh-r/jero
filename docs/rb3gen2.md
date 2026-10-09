@@ -12,7 +12,10 @@ same Pico bridge, and pairs with the same PS4 pad. Only the Raspberry Pi specifi
 | Servo bus | Pico on the Pi's only USB data port | **Pico on a USB-A port**, same firmware, same `/dev/ttyACM0` (stable name `/dev/jero-servo`) |
 | Servo IO | `robot/feetech_io.py` | **same** (rustypot not needed) |
 | IMU | MPU9250 board on the Pi's I2C (3.3 V) | MPU9250 on an RB3 I2C bus **through a level shifter** (see wiring), or later the RB3's own ICM-42688 |
-| Foot switches | upstream `feet_contacts` (Adafruit `board`, Pi only) | `robot/board_shims.py`: `none` (unwired) or `gpiod` |
+| Foot switches | none fitted: `--feet none` is the default on both boards | same (`gpiod` available if switches are ever added) |
+| Launch | `robot/jero.sh` | **same** `robot/jero.sh` (detects the board) |
+| Voice | (none) | **`brain/voice.py`**: jero-speech events -> skills -> link; ElevenLabs voice, Piper offline fallback |
+| Camera | (none) | Intel RealSense on the head (USB-C), librealsense on the RB3 (not wired into skills yet) |
 | Eyes, antennas, projector | upstream, Pi GPIO | disabled (stand-ins raise if enabled) |
 | OS | Raspberry Pi OS | **Ubuntu** (aarch64) |
 | Setup | `robot/setup_pi.sh` | **`robot/setup_rb3.sh`** |
@@ -31,7 +34,8 @@ Pi it installs the board shims, and requires `--imu mpu6050`. Force it with `--b
 |---|---|---|
 | Servo bus | Pico USB → RB3 **USB-A** | Pico powered by USB; its GND also to the servo supply GND (star point at the battery −) |
 | IMU (MPU9250) | RB3 I2C SDA/SCL **via a bidirectional level shifter** (1.8 V ↔ 3.3 V, e.g. PCA9306/TXS0102 board), 3.3 V + GND for the IMU | find the bus with `i2cdetect -l`, check `i2cdetect -y <bus>` shows `68` |
-| Foot switches (optional) | each switch between a GPIO and GND | safe at any logic voltage (the switch only pulls to GND); find chip/line with `gpioinfo` |
+| Foot switches | not fitted | the policy reads both feet as "not touching" (sim: walks, weaker push recovery; retrain with contacts zeroed after the event) |
+| RealSense | head, USB-C cable through the 4 neck/head joints with slack | ~90 g on the head; route the cable so it can't drag on the head servos |
 | Power | 3S pack → RB3 DC input (12 V) | **check the RB3's input voltage range**: a full 3S pack is 12.6 V |
 | PS4 pad | Bluetooth (onboard) | same pairing as on the Pi |
 
@@ -65,8 +69,8 @@ python ~/Jero/tools/policy_dryrun.py --seconds 10
 # 4. PS4 pad: pair once (sudo btmgmt ssp on / bluetoothctl pair, trust, connect / sudo btmgmt ssp off)
 python ~/Jero/tools/pad_test.py
 
-# 5. walk (in the air first; X = cross starts/pauses)
-python ~/Jero/robot/jero_walk.py --board other --imu mpu6050 --no-link --serial-port /dev/jero-servo
+# 5. walk: one command (waits for the pad, finds the Pico, raises the walk's priority, logs)
+~/Jero/robot/jero.sh          # Cross (X) starts/pauses; in the air first
 ```
 
 Foot switches wired? Put them in `~/.config/jero/board.json`:
@@ -91,6 +95,48 @@ as "not touching", as on an unwired Pi (in sim: walks, recovers from pushes less
 - **Not verified on hardware yet:** this branch is tested against upstream's real modules on a
   laptop (tests/test_board_shims.py: the walk script imports and builds with no Pi GPIO library),
   but not yet run on an RB3. Expect to adjust the I2C bus number, GPIO lines and group permissions.
+
+## Voice: jero-speech + ElevenLabs
+
+[jero-speech](https://github.com/nameissakthi25/jero-speech) does wake word / VAD -> STT -> intent and
+emits events; `brain/voice.py` turns them into motion (`brain/skills.py`) over the link and speaks
+through ElevenLabs, falling back to the offline Piper voice whenever the network or the key isn't there.
+
+```bash
+# once
+git clone https://github.com/nameissakthi25/jero-speech ~/jero-speech     # + its setup (scripts/setup_rb3.sh)
+~/jero-speech/.venv/bin/pip install -e ~/Jero/jero_link
+sudo systemctl disable --now jero-speech        # voice.py runs the speech service itself (one mic owner)
+install -m 600 /dev/null ~/.config/jero/elevenlabs.env
+nano ~/.config/jero/elevenlabs.env              # ELEVENLABS_API_KEY=...  (optional: ELEVENLABS_VOICE_ID=...)
+
+# each run (terminal 2, after robot/jero.sh is up and Cross has unpaused it)
+~/jero-speech/.venv/bin/python ~/Jero/brain/voice.py --dry-run   # check: logs skills, doesn't move
+~/jero-speech/.venv/bin/python ~/Jero/brain/voice.py
+```
+
+| Intent | Skill |
+|---|---|
+| walk (direction, steps / duration, speed) | forward / back at 0.07-0.15 m/s, or sidestep; 3 s default, max 10 s |
+| turn (direction, angle) | 0.8 rad/s for angle (default 90 deg) |
+| stop, cancel, and the "stop" fast path | zero command at once |
+| dance | 8 s sway + head yaw, "Let's dance!" ... "Ta-da!" |
+| look (up/down/left/right) | head pose 2.5 s |
+| greet / yes / no / emote / chit_chat | nod, shake, wiggle, and a spoken line |
+
+- Canned lines are rendered once through ElevenLabs into `~/.cache/jero/tts-elevenlabs/` (online), so
+  they play instantly and offline later. Each ElevenLabs call times out after 3 s.
+- Voice does nothing while the walk is paused: press Cross first.
+- Check the head signs once ("look up" should look up); flip `HEAD_UP` in `brain/skills.py` if not.
+- CPU: speech uses 4 threads for STT and TTS; `robot/jero.sh` gives the walk real-time priority on the
+  fastest core. Watch the walk log for `Policy control budget exceeded` with speech running.
+
+## RealSense on the head
+
+Mechanically: ~90 g at the face; in sim, 90 g 5 cm forward of the head's centre of mass costs a little
+push recovery (8/8 -> 6/8), the head servos hold it easily (5 % of stall). The USB-C cable must have
+service loops through all four neck/head joints. Software: librealsense is on the RB3; turning its
+frames into a follow-me or look-at skill is the next step after the robot walks on the RB3.
 
 ## Later: the RB3's own IMU
 

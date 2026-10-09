@@ -26,7 +26,7 @@ command -v apt-get >/dev/null || {
 
 step "System packages"
 sudo apt-get update
-sudo apt-get install -y git curl python3-venv python3-dev build-essential i2c-tools gpiod bluez usbutils
+sudo apt-get install -y git curl python3-venv python3-dev build-essential i2c-tools bluez usbutils psmisc util-linux
 for g in dialout i2c input gpio; do
   if getent group "$g" >/dev/null && ! id -nG "$USER" | tr ' ' '\n' | grep -qx "$g"; then
     sudo usermod -aG "$g" "$USER"
@@ -50,7 +50,6 @@ git -C "$RUNTIME" checkout -q "$RUNTIME_SHA"
 uv pip install --python "$VENV/bin/python" -e "$RUNTIME" --no-deps
 uv pip install --python "$VENV/bin/python" numpy onnxruntime scipy pygame smbus2
 uv pip install --python "$VENV/bin/python" rustypot || warn "rustypot not installed: fine, the walk uses robot/feetech_io.py"
-uv pip install --python "$VENV/bin/python" gpiod || warn "python gpiod not installed: only needed for wired foot switches (--feet gpiod)"
 uv pip install --python "$VENV/bin/python" -e "$REPO/jero_link"
 "$VENV/bin/python" -c "import onnxruntime, numpy, pygame, jero_link; print('ok: onnxruntime', onnxruntime.__version__, 'numpy', numpy.__version__)"
 

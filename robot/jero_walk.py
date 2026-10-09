@@ -88,9 +88,10 @@ def parse_args():
     )
     p.add_argument(
         "--feet",
-        choices=("auto", "none", "gpiod"),
+        choices=("auto", "none", "gpiod", "pi"),
         default=os.environ.get("JERO_FEET", "auto"),
-        help="non-Pi foot switches: none (unwired) or gpiod; auto = ~/.config/jero/board.json, else none",
+        help="foot switches: none (Jero has none: both read 'not touching'), gpiod, or pi (upstream "
+        "Pi GPIO 22/27); auto = ~/.config/jero/board.json, else none",
     )
     p.add_argument("--feet-chip", default=None, help="gpiod chip, e.g. /dev/gpiochip4")
     p.add_argument("--feet-lines", default=None, help="gpiod line offsets LEFT,RIGHT, e.g. 22,27")
@@ -142,15 +143,21 @@ def main():
     import board_shims
 
     board = board_shims.detect() if args.board == "auto" else args.board
+    cfg = board_shims.load_config().get("feet", {})
+    feet = args.feet if args.feet != "auto" else cfg.get("backend", "none")
+    chip = args.feet_chip or cfg.get("chip")
+    lines = args.feet_lines.split(",") if args.feet_lines else cfg.get("lines")
+    lines = tuple(int(x) for x in lines) if lines else None
     if board != "pi":
         if args.imu != "mpu6050":
             sys.exit("not a Raspberry Pi: upstream's BNO055 driver needs Pi GPIO; use --imu mpu6050")
-        cfg = board_shims.load_config().get("feet", {})
-        feet = args.feet if args.feet != "auto" else cfg.get("backend", "none")
-        chip = args.feet_chip or cfg.get("chip")
-        lines = args.feet_lines.split(",") if args.feet_lines else cfg.get("lines")
-        board_shims.install(feet, chip, tuple(int(x) for x in lines) if lines else None)
+        if feet == "pi":
+            sys.exit("--feet pi needs a Raspberry Pi; use none or gpiod")
+        board_shims.install(feet, chip, lines)
         log.info("board: %s (non-Pi shims installed)", board)
+    elif feet != "pi":
+        board_shims.install_feet(feet, chip, lines)  # no foot switches on Jero: skip Pi GPIO for them
+    log.info("foot switches: %s", feet)
 
     if args.imu == "mpu6050":
         install_mpu6050(log)
