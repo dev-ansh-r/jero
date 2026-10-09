@@ -21,6 +21,7 @@ import logging
 import math
 import os
 import struct
+import sys
 import time
 
 log = logging.getLogger("jero.feetech")
@@ -312,6 +313,12 @@ def open_bus(port: str, baudrate: int = 1000000) -> FeetechIO:
 
 def install() -> None:
     """Make every HWI built after this use FeetechIO (call before missing_servos.install)."""
+    try:
+        import rustypot  # noqa: F401  upstream's HWI imports it at module level
+    except ImportError:  # not needed with FeetechIO (e.g. on a board without a rustypot wheel)
+        import types
+
+        sys.modules["rustypot"] = types.ModuleType("rustypot")
     import mini_bdx_runtime.rustypot_position_hwi as hwi_mod
 
     class _Bus:  # stands in for the rustypot module inside hwi_mod only

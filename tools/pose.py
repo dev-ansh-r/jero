@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from pathlib import Path
 
 # Order and init pose: upstream mini_bdx_runtime/rustypot_position_hwi.py (HWI.joints / init_pos).
 JOINTS = {
@@ -57,9 +58,10 @@ def main() -> int:
     p.add_argument("--kp", type=int, default=16)
     args = p.parse_args()
 
-    import rustypot
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "robot"))
+    import feetech_io  # same servo IO as the walk; no rustypot needed (e.g. on the RB3 Gen 2)
 
-    io = rustypot.feetech(args.port, 1000000)
+    io = feetech_io.open_bus(args.port)
     ids = [sid for sid, _ in JOINTS.values()]
     target = [0.0 if args.pose == "zero" else init for _, init in JOINTS.values()]
 

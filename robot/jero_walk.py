@@ -9,6 +9,7 @@ commands come from: Xbox pad (priority) + Jero link over Wi-Fi (Jetson / laptop)
     python robot/jero_walk.py --imu mpu6050         # GY-521 instead of BNO055 (run tools/imu_check.py first)
     python robot/jero_walk.py --missing-servos 30,31,32,33   # bench: head chain not wired (stand only)
     python robot/jero_walk.py --pad ps4             # DualShock 4 (auto-detected by name otherwise)
+    python robot/jero_walk.py --board other --imu mpu6050   # RB3 Gen 2 etc. (auto-detected); see docs/rb3gen2.md
 """
 
 from __future__ import annotations
@@ -79,6 +80,20 @@ def parse_args():
         default=os.environ.get("JERO_IMU", "bno055"),
         help="bno055 = upstream driver; mpu6050 = robot/imu_mpu6050.py (env JERO_IMU)",
     )
+    p.add_argument(
+        "--board",
+        choices=("auto", "pi", "other"),
+        default=os.environ.get("JERO_BOARD", "auto"),
+        help="pi = upstream GPIO code; other (RB3 Gen 2, ...) = robot/board_shims.py; auto = detect",
+    )
+    p.add_argument(
+        "--feet",
+        choices=("auto", "none", "gpiod"),
+        default=os.environ.get("JERO_FEET", "auto"),
+        help="non-Pi foot switches: none (unwired) or gpiod; auto = ~/.config/jero/board.json, else none",
+    )
+    p.add_argument("--feet-chip", default=None, help="gpiod chip, e.g. /dev/gpiochip4")
+    p.add_argument("--feet-lines", default=None, help="gpiod line offsets LEFT,RIGHT, e.g. 22,27")
     # upstream knobs, same defaults as v2_rl_walk_mujoco.py
     p.add_argument("-a", "--action_scale", type=float, default=0.25)
     p.add_argument("-p", type=int, default=30)
@@ -123,6 +138,19 @@ def main():
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     # upstream loads ./polynomial_coefficients.pkl and ../mini_bdx_runtime/assets relative to scripts/
     os.chdir(runtime / "scripts")
+
+    import board_shims
+
+    board = board_shims.detect() if args.board == "auto" else args.board
+    if board != "pi":
+        if args.imu != "mpu6050":
+            sys.exit("not a Raspberry Pi: upstream's BNO055 driver needs Pi GPIO; use --imu mpu6050")
+        cfg = board_shims.load_config().get("feet", {})
+        feet = args.feet if args.feet != "auto" else cfg.get("backend", "none")
+        chip = args.feet_chip or cfg.get("chip")
+        lines = args.feet_lines.split(",") if args.feet_lines else cfg.get("lines")
+        board_shims.install(feet, chip, tuple(int(x) for x in lines) if lines else None)
+        log.info("board: %s (non-Pi shims installed)", board)
 
     if args.imu == "mpu6050":
         install_mpu6050(log)
