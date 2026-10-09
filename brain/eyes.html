@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jero Vision</title>
+<style>
+  :root {
+    --bg: #0a0d12; --panel: #121821; --line: #1f2a37; --text: #dce6f2; --dim: #7d8ca0;
+    --accent: #28dcff; --warm: #ffb547; --hot: #ff5a5f; --ok: #3ddc84;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  .brand { font: 700 20px/1 ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .14em; }
+  .brand b { color: var(--accent); }
+  .live { display: inline-flex; align-items: center; gap: 8px; color: var(--dim); font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--hot); }
+  .dot.on { background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  header .spacer { flex: 1; }
+  header .meta { color: var(--dim); font: 13px ui-monospace, Consolas, monospace; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; padding: 16px 20px; }
+  .feeds { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-content: start; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .card h2 { margin: 0; padding: 10px 14px; font: 600 12px ui-monospace, Consolas, monospace; letter-spacing: .12em;
+    color: var(--dim); text-transform: uppercase; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
+  .feed img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
+  .legend { display: flex; align-items: center; gap: 8px; padding: 8px 14px; color: var(--dim); font-size: 12px; }
+  .legend .bar { flex: 1; height: 8px; border-radius: 4px;
+    background: linear-gradient(90deg, #7a0403, #fb8022, #a4fc3b, #1ae4b6, #4686fb, #30123b); }
+  aside { display: grid; gap: 16px; align-content: start; }
+  .big { padding: 16px 14px 18px; }
+  .big .label { color: var(--dim); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+  .big .value { font: 700 54px/1.05 ui-monospace, Consolas, monospace; margin-top: 6px; transition: color .3s; }
+  .big .value small { font-size: 22px; color: var(--dim); margin-left: 4px; }
+  .big .sub { color: var(--dim); margin-top: 4px; min-height: 1.4em; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; }
+  .stat { padding: 12px 14px; border-top: 1px solid var(--line); }
+  .stat:nth-child(odd) { border-right: 1px solid var(--line); }
+  .stat .k { color: var(--dim); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+  .stat .v { font: 600 20px ui-monospace, Consolas, monospace; margin-top: 2px; }
+  canvas { display: block; width: 100%; height: auto; }
+  .offline { position: fixed; inset: auto 16px 16px auto; background: var(--hot); color: #fff; padding: 8px 14px;
+    border-radius: 8px; font-weight: 600; display: none; }
+  @media (max-width: 980px) {
+    main { grid-template-columns: 1fr; padding: 16px; }
+    header { padding: 12px 16px; flex-wrap: wrap; }
+  }
+  @media (max-width: 640px) {
+    .feeds { grid-template-columns: 1fr; }
+    .big .value { font-size: 44px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><b>JERO</b> · VISION</div>
+  <span class="live"><span class="dot" id="dot"></span><span id="liveText">connecting…</span></span>
+  <span class="spacer"></span>
+  <span class="meta" id="camera">—</span>
+</header>
+<main>
+  <section class="feeds">
+    <div class="card feed">
+      <h2><span>What Jero sees</span><span id="fps">— fps</span></h2>
+      <img src="/color.mjpg" alt="Colour camera">
+    </div>
+    <div class="card feed">
+      <h2><span>Depth</span><span>0 – 4 m</span></h2>
+      <img src="/depth.mjpg" alt="Depth heatmap">
+      <div class="legend"><span>near</span><span class="bar"></span><span>far</span></div>
+    </div>
+  </section>
+  <aside>
+    <div class="card big">
+      <div class="label">Nearest</div>
+      <div class="value" id="dist">—<small>m</small></div>
+      <div class="sub" id="where">looking…</div>
+    </div>
+    <div class="card">
+      <h2><span>Radar · top view</span><span>3 m</span></h2>
+      <canvas id="radar" width="660" height="400"></canvas>
+    </div>
+    <div class="card">
+      <h2><span>Status</span></h2>
+      <div class="stats">
+        <div class="stat"><div class="k">Bearing</div><div class="v" id="yaw">—</div></div>
+        <div class="stat"><div class="k">Elevation</div><div class="v" id="pitch">—</div></div>
+        <div class="stat"><div class="k">Head follow</div><div class="v" id="follow">—</div></div>
+        <div class="stat"><div class="k">Obstacles</div><div class="v" id="obs">—</div></div>
+      </div>
+    </div>
+  </aside>
+</main>
+<div class="offline" id="offline">camera offline — retrying</div>
+<script>
+const $ = id => document.getElementById(id);
+const canvas = $("radar"), ctx = canvas.getContext("2d");
+let state = null, sweep = 0, lastOk = 0;
+
+function distColor(d) { return d < 0.5 ? "var(--hot)" : d < 1.0 ? "var(--warm)" : "var(--accent)"; }
+
+async function poll() {
+  try {
+    const r = await fetch("/status.json", { cache: "no-store" });
+    state = await r.json();
+    lastOk = performance.now();
+    $("camera").textContent = `${state.camera} · ${state.size[0]}×${state.size[1]}`;
+    $("fps").textContent = `${state.fps.toFixed(1)} fps`;
+    const t = state.target;
+    if (t) {
+      $("dist").innerHTML = `${t.distance.toFixed(2)}<small>m</small>`;
+      $("dist").style.color = distColor(t.distance);
+      const side = Math.abs(t.yaw_deg) < 5 ? "straight ahead" : `${Math.abs(t.yaw_deg).toFixed(0)}° ${t.yaw_deg > 0 ? "left" : "right"}`;
+      $("where").textContent = t.distance < 0.5 ? `very close! ${side}` : side;
+      $("yaw").textContent = `${t.yaw_deg > 0 ? "+" : ""}${t.yaw_deg.toFixed(0)}°`;
+      $("pitch").textContent = `${t.pitch_deg > 0 ? "+" : ""}${t.pitch_deg.toFixed(0)}°`;
+    } else {
+      $("dist").innerHTML = `—<small>m</small>`;
+      $("dist").style.color = "";
+      $("where").textContent = "nothing within 3 m";
+      $("yaw").textContent = $("pitch").textContent = "—";
+    }
+    $("follow").textContent = state.follow ? (state.head ? `${(state.head.head_yaw * 57.3).toFixed(0)}°` : "on") : "off";
+    $("obs").textContent = state.radar.length;
+  } catch (e) { /* offline banner below */ }
+  setTimeout(poll, 200);
+}
+
+function drawRadar() {
+  const W = canvas.width, H = canvas.height, ox = W / 2, oy = H - 24, R = H - 44, maxM = 3;
+  ctx.clearRect(0, 0, W, H);
+  const css = getComputedStyle(document.documentElement);
+  const line = css.getPropertyValue("--line"), dim = css.getPropertyValue("--dim"), acc = css.getPropertyValue("--accent");
+  ctx.lineWidth = 1.5;
+  for (let m = 1; m <= maxM; m++) {
+    ctx.strokeStyle = line; ctx.beginPath(); ctx.arc(ox, oy, R * m / maxM, Math.PI, 2 * Math.PI); ctx.stroke();
+    ctx.fillStyle = dim; ctx.font = "20px ui-monospace, Consolas, monospace"; ctx.fillText(`${m} m`, ox + 6, oy - R * m / maxM + 22);
+  }
+  const fov = 0.75;  // ~43° each side
+  ctx.strokeStyle = line;
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox + s * Math.sin(fov) * R, oy - Math.cos(fov) * R); ctx.stroke(); }
+  sweep = (sweep + 0.02) % (2 * fov);
+  const a = -fov + sweep;
+  const g = ctx.createLinearGradient(ox, oy, ox + Math.sin(a) * R, oy - Math.cos(a) * R);
+  g.addColorStop(0, "rgba(40,220,255,0)"); g.addColorStop(1, "rgba(40,220,255,.55)");
+  ctx.strokeStyle = g; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox + Math.sin(a) * R, oy - Math.cos(a) * R); ctx.stroke();
+  if (state) {
+    for (const [x, z] of state.radar) {
+      if (z > maxM) continue;
+      ctx.fillStyle = z < 0.5 ? "#ff5a5f" : z < 1 ? "#ffb547" : acc;
+      ctx.beginPath(); ctx.arc(ox + x / maxM * R, oy - z / maxM * R, 6, 0, 2 * Math.PI); ctx.fill();
+    }
+    const t = state.target;
+    if (t && t.distance <= maxM) {
+      const x = ox - Math.sin(t.yaw) * t.distance / maxM * R, y = oy - Math.cos(t.yaw) * t.distance / maxM * R;
+      ctx.strokeStyle = "#28dcff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 16, 0, 2 * Math.PI); ctx.stroke();
+    }
+  }
+  ctx.fillStyle = acc; ctx.beginPath(); ctx.moveTo(ox, oy - 14); ctx.lineTo(ox - 10, oy + 6); ctx.lineTo(ox + 10, oy + 6); ctx.fill();
+  const live = performance.now() - lastOk < 1500;
+  $("dot").classList.toggle("on", live);
+  $("liveText").textContent = live ? "live" : "offline";
+  $("offline").style.display = live || !lastOk ? "none" : "block";
+  requestAnimationFrame(drawRadar);
+}
+
+poll();
+drawRadar();
+</script>
+</body>
+</html>

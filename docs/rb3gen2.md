@@ -15,7 +15,7 @@ same Pico bridge, and pairs with the same PS4 pad. Only the Raspberry Pi specifi
 | Foot switches | none fitted: `--feet none` is the default on both boards | same (`gpiod` available if switches are ever added) |
 | Launch | `robot/jero.sh` | **same** `robot/jero.sh` (detects the board) |
 | Voice | (none) | **`brain/voice.py`**: jero-speech events -> skills -> link; ElevenLabs voice, Piper offline fallback |
-| Camera | (none) | Intel RealSense on the head (USB-C), librealsense on the RB3 (not wired into skills yet) |
+| Camera | (none) | RealSense D455 on the head (USB-C): `brain/eyes.py` dashboard + head-follow |
 | Eyes, antennas, projector | upstream, Pi GPIO | disabled (stand-ins raise if enabled) |
 | OS | Raspberry Pi OS | **Ubuntu** (aarch64) |
 | Setup | `robot/setup_pi.sh` | **`robot/setup_rb3.sh`** |
@@ -131,12 +131,40 @@ nano ~/.config/jero/elevenlabs.env              # ELEVENLABS_API_KEY=...  (optio
 - CPU: speech uses 4 threads for STT and TTS; `robot/jero.sh` gives the walk real-time priority on the
   fastest core. Watch the walk log for `Policy control budget exceeded` with speech running.
 
-## RealSense on the head
+## RealSense on the head: Jero's eyes
+
+Tested on the RB3: RealSense D455 on USB 3.2, aligned depth + colour 640x480 at 28.5 fps; the
+dashboard at 15 fps uses about one of the 8 cores and stays off the walk's core.
+
+```bash
+~/Jero/robot/setup_vision.sh                                        # once: pyrealsense2 wheel, OpenCV, udev rules
+~/.virtualenvs/jero-vision/bin/python ~/Jero/brain/eyes.py          # dashboard: http://<rb3>:8080
+~/.virtualenvs/jero-vision/bin/python ~/Jero/brain/eyes.py --fake   # no camera: moving test scene
+~/.virtualenvs/jero-vision/bin/python ~/Jero/brain/eyes.py --follow --dry-run   # log head-follow commands
+~/.virtualenvs/jero-vision/bin/python ~/Jero/brain/eyes.py --follow # head turns to the nearest person/object
+```
+
+The page (any browser on the same network; view-only) shows the colour image with the nearest
+object boxed and its distance, the depth heatmap, a top-down radar and the bearing. `--follow` sends
+head poses over the link (walk running with the link on, unpaused); the walk keeps balancing.
+Camera mounted upside down: `--rotate 180`.
 
 Mechanically: ~90 g at the face; in sim, 90 g 5 cm forward of the head's centre of mass costs a little
 push recovery (8/8 -> 6/8), the head servos hold it easily (5 % of stall). The USB-C cable must have
-service loops through all four neck/head joints. Software: librealsense is on the RB3; turning its
-frames into a follow-me or look-at skill is the next step after the robot walks on the RB3.
+service loops through all four neck/head joints, and go to a USB 3 port.
+
+## Standing expressions
+
+```bash
+python ~/Jero/brain/expressions.py curious     # look around, question chirps (~10 s)
+python ~/Jero/brain/expressions.py glitch      # malfunction, power down, reboot, happy wiggle (~11 s)
+python ~/Jero/brain/expressions.py --loop      # both, with pauses (booth stand-by)
+python ~/Jero/brain/expressions.py --export ~/sounds   # listen to the sounds anywhere
+```
+
+Head moves over the link while the walk stands at zero speed (Cross to unpause first). Sounds play
+with aplay; without a working sound card the expressions run silent (the RB3's card needs the
+display driver: `/etc/modprobe.d/blacklist-msm-drm.conf` blocks it on this image).
 
 ## Later: the RB3's own IMU
 
