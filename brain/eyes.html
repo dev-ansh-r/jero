@@ -4,121 +4,96 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jero Vision</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
 <style>
   :root {
-    --ink: #1A1438;        /* page */
-    --ink-2: #241C4A;      /* panels */
-    --ink-3: #322862;      /* lines, inactive */
-    --paper: #F1ECFF;      /* text */
-    --lilac: #9C93C9;      /* secondary text */
-    --beak: #FFC83D;       /* Jero's accent */
-    --coral: #FF6B57;      /* too close, warnings */
-    --mint: #7FE3B8;       /* live */
-    --round: "Fredoka", ui-rounded, "Arial Rounded MT Bold", "Segoe UI", system-ui, sans-serif;
-    --text: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+    --bg: #0a0d12; --panel: #121821; --line: #1f2a37; --text: #dce6f2; --dim: #7d8ca0;
+    --accent: #28dcff; --warm: #ffb547; --hot: #ff5a5f; --ok: #3ddc84;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; min-height: 100%; background: var(--ink); color: var(--paper); font: 400 16px/1.45 var(--text); }
-  body { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;
-    height: 100vh; overflow: hidden; }
-
-  /* -- top: Jero's face + speech bubble ------------------------------------------------- */
-  .top { display: grid; grid-template-columns: auto 1fr; gap: 22px; align-items: center; padding: 18px 24px 10px; }
-  .face { width: 148px; height: 128px; flex: none; }
-  .face svg { width: 100%; height: 100%; overflow: visible; }
-  .face .eye-white { fill: var(--paper); }
-  .face .pupil { fill: var(--ink); transition: transform .18s ease-out; }
-  .face .lid { fill: var(--ink-2); transform-box: fill-box; transform-origin: center top; transform: scaleY(0); transition: transform .08s; }
-  .face.blink .lid { transform: scaleY(1); }
-  .face.wide .eye { transform: scale(1.18); }
-  .face .eye { transform-box: fill-box; transform-origin: center; transition: transform .15s; }
-  .face .beak-low { transform-box: fill-box; transform-origin: center top; transition: transform .07s; }
-  .face.talk .beak-low { transform: translateY(5px); }
-
-  .bubble { position: relative; background: var(--paper); color: var(--ink); border-radius: 28px; padding: 18px 28px;
-    min-height: 92px; display: flex; align-items: center; }
-  .bubble::before { content: ""; position: absolute; left: -16px; top: 42px; border: 12px solid transparent;
-    border-right: 18px solid var(--paper); border-left: 0; }
-  .bubble p { margin: 0; font: 600 clamp(24px, 3.1vw, 44px)/1.15 var(--round); max-width: 46ch; }
-  .bubble p.idle { color: var(--lilac); font-weight: 500; }
-  .status-line { display: flex; gap: 18px; align-items: center; color: var(--lilac); font-size: 15px; margin-top: 8px; padding-left: 4px; }
-  .live { display: inline-flex; align-items: center; gap: 7px; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--coral); }
-  .dot.on { background: var(--mint); }
-  .mode { color: var(--beak); font-weight: 700; }
-
-  /* -- middle: feed + side ------------------------------------------------------------- */
-  /* fits one screen (projector): the feed takes the full height at 4:3, the side column the rest */
-  main { display: grid; grid-template-columns: auto minmax(300px, 1fr); gap: 20px; padding: 10px 24px 14px; min-height: 0; }
-  .feed { position: relative; height: 100%; aspect-ratio: 4 / 3; max-width: calc(100vw - 368px); border-radius: 22px;
-    overflow: hidden; background: #000; outline: 4px solid transparent; transition: outline-color .2s; }
-  .feed.close { outline-color: var(--coral); }
-  .feed img { display: block; width: 100%; height: 100%; object-fit: cover; }
-  .ribbon { position: absolute; left: 0; right: 0; top: 0; padding: 14px 22px; font: 700 clamp(22px, 2.6vw, 38px)/1.1 var(--round);
-    background: var(--beak); color: var(--ink); transform: translateY(-110%); transition: transform .25s ease-out; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  .brand { font: 700 20px/1 ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .14em; }
+  .brand b { color: var(--accent); }
+  .live { display: inline-flex; align-items: center; gap: 8px; color: var(--dim); font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--hot); }
+  .dot.on { background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .mode { font: 600 12px ui-monospace, Consolas, monospace; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  .tabs { display: flex; gap: 4px; margin-left: 8px; }
+  .tabs a { font: 600 12px ui-monospace, Consolas, monospace; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--dim); text-decoration: none; padding: 5px 10px; border-radius: 6px; border: 1px solid transparent; }
+  .tabs a[aria-current="page"] { color: var(--text); border-color: var(--line); background: var(--panel); }
+  .tabs a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  header .spacer { flex: 1; }
+  header .meta { color: var(--dim); font: 13px ui-monospace, Consolas, monospace; }
+  .show { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px 20px; }
+  main[hidden] { display: none; }
+  .says p { margin: 0; padding: 18px 18px 22px; font-size: 40px; line-height: 1.25; min-height: 1.25em; }
+  .says p.idle { color: var(--dim); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; padding: 16px 20px; }
+  .feeds { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-content: start; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .card h2 { margin: 0; padding: 10px 14px; font: 600 12px ui-monospace, Consolas, monospace; letter-spacing: .12em;
+    color: var(--dim); text-transform: uppercase; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
+  .feed { transition: border-color .2s; }
+  .feed.close { border-color: var(--hot); }
+  .feed img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
+  .ribbon { position: fixed; left: 0; right: 0; top: 0; z-index: 15; padding: 14px 20px; font-weight: 700; font-size: 24px;
+    background: var(--accent); color: var(--bg); transform: translateY(-110%); transition: transform .2s ease-out; }
   .ribbon.show { transform: translateY(0); }
-  .ribbon.warn { background: var(--coral); color: var(--paper); }
-  .ribbon.system { background: var(--ink-3); color: var(--paper); }
-  .ribbon.party { background: linear-gradient(90deg, var(--beak), var(--coral), var(--beak)); }
-  .count { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
-    font: 700 min(38vw, 360px)/1 var(--round); color: var(--paper); text-shadow: 0 6px 40px rgba(26,20,56,.7); opacity: 0; }
-  .count.show { opacity: 1; animation: pop .9s ease-out; }
-  @keyframes pop { from { transform: scale(1.35); opacity: 0; } 20% { opacity: 1; } to { transform: scale(1); } }
+  .ribbon.warn { background: var(--hot); color: #fff; }
+  .ribbon.party { background: var(--warm); }
+  .ribbon.system { background: var(--line); color: var(--text); }
+  .count { position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; pointer-events: none; opacity: 0;
+    font: 700 220px/1 ui-monospace, Consolas, monospace; color: #fff; text-shadow: 0 4px 40px rgba(0,0,0,.7); }
+  .count.show { opacity: 1; }
   .flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 20; }
   .flash.go { animation: flash .6s ease-out; }
-  @keyframes flash { from { opacity: .95; } to { opacity: 0; } }
-
-  aside { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
-  aside .grow { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-  aside .grow > canvas, aside .grow > img { flex: 1 1 0; min-height: 0; width: 100%; object-fit: contain; }
-  .panel { background: var(--ink-2); border-radius: 18px; padding: 14px 16px; }
-  .panel h2 { margin: 0 0 6px; font: 700 15px var(--text); color: var(--lilac); }
-  .distance { font: 700 clamp(56px, 6.5vw, 96px)/1 var(--round); letter-spacing: -.01em; transition: color .3s; }
-  .distance small { font-size: .38em; color: var(--lilac); margin-left: 6px; font-weight: 600; }
-  .where { color: var(--lilac); margin-top: 4px; min-height: 1.45em; }
-  .meter { height: 10px; border-radius: 5px; background: var(--ink-3); margin-top: 12px; overflow: hidden; }
-  .meter span { display: block; height: 100%; width: 0; background: var(--mint); border-radius: 5px; transition: width .2s, background .3s; }
+  @keyframes flash { from { opacity: .9; } to { opacity: 0; } }
+  .legend { display: flex; align-items: center; gap: 8px; padding: 8px 14px; color: var(--dim); font-size: 12px; }
+  .legend .bar { flex: 1; height: 8px; border-radius: 4px;
+    background: linear-gradient(90deg, #7a0403, #fb8022, #a4fc3b, #1ae4b6, #4686fb, #30123b); }
+  aside { display: grid; gap: 16px; align-content: start; }
+  .big { padding: 16px 14px 18px; }
+  .big .label { color: var(--dim); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+  .big .value { font: 700 54px/1.05 ui-monospace, Consolas, monospace; margin-top: 6px; transition: color .3s; }
+  .big .value small { font-size: 22px; color: var(--dim); margin-left: 4px; }
+  .big .sub { color: var(--dim); margin-top: 4px; min-height: 1.4em; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; }
+  .stat { padding: 12px 14px; border-top: 1px solid var(--line); }
+  .stat:nth-child(odd) { border-right: 1px solid var(--line); }
+  .stat .k { color: var(--dim); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+  .stat .v { font: 600 20px ui-monospace, Consolas, monospace; margin-top: 2px; }
   canvas { display: block; width: 100%; height: auto; }
-  .depth img { display: block; border-radius: 12px; }
-
-  /* -- bottom: photos + log ------------------------------------------------------------- */
-  footer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 30%); gap: 20px; padding: 0 24px 18px; }
-  .strip { display: flex; gap: 10px; overflow-x: auto; min-height: 92px; align-items: center; }
-  .strip button { flex: none; padding: 0; border: 3px solid transparent; border-radius: 12px; background: none; cursor: pointer; }
-  .strip button:focus-visible, .modal button:focus-visible { outline: 3px solid var(--beak); outline-offset: 2px; }
-  .strip img { display: block; height: 84px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 9px; }
-  .strip .empty { color: var(--lilac); }
-  .log { list-style: none; margin: 0; padding: 0; color: var(--lilac); font-size: 14px; max-height: 92px; overflow: hidden; }
+  .photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; padding: 12px; }
+  .photos button { padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #000; cursor: pointer; }
+  .photos button:focus-visible, .modal button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .photos img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+  .photos .empty { grid-column: 1 / -1; color: var(--dim); font-size: 13px; padding: 4px; }
+  .log { list-style: none; margin: 0; padding: 8px 14px 12px; font: 12px/1.6 ui-monospace, Consolas, monospace; color: var(--dim); }
   .log li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .log li b { color: var(--paper); font-weight: 700; }
-
-  .modal { position: fixed; inset: 0; display: none; place-items: center; background: rgba(26,20,56,.88); z-index: 10; padding: 24px; }
+  .log li b { color: var(--text); font-weight: 600; }
+  .modal { position: fixed; inset: 0; display: none; place-items: center; background: rgba(10,13,18,.9); z-index: 10; padding: 20px; }
   .modal.show { display: grid; }
   .modal figure { margin: 0; text-align: center; }
-  .modal img { max-width: min(92vw, 1100px); max-height: 78vh; border-radius: 18px; border: 8px solid var(--paper); }
-  .modal figcaption { font: 600 clamp(22px, 2.4vw, 34px) var(--round); margin-top: 14px; }
-  .modal button { margin-top: 12px; font: 700 16px var(--text); color: var(--ink); background: var(--beak); border: 0; border-radius: 999px; padding: 10px 22px; cursor: pointer; }
-
-  .offline { position: fixed; right: 20px; bottom: 20px; background: var(--coral); color: var(--paper); padding: 10px 16px; border-radius: 12px; font-weight: 700; display: none; z-index: 30; }
-
-  @media (max-width: 960px) {
-    body { height: auto; min-height: 100vh; overflow: auto; }
-    .feed { height: auto; width: 100%; max-width: none; }
-    aside .grow { flex: none; }
-    aside .grow > canvas, aside .grow > img { flex: none; height: auto; }
-    .depth img { aspect-ratio: 4 / 3; }
-    main, footer { grid-template-columns: 1fr; padding-left: 16px; padding-right: 16px; }
-    .top { padding: 14px 16px 6px; gap: 14px; }
-    .face { width: 96px; height: 84px; }
-    .bubble { padding: 14px 18px; min-height: 70px; }
-    .bubble::before { top: 26px; }
+  .modal img { max-width: min(92vw, 1100px); max-height: 78vh; border-radius: 12px; border: 1px solid var(--line); }
+  .modal figcaption { color: var(--dim); font: 14px ui-monospace, Consolas, monospace; margin-top: 10px; }
+  .modal button { margin-top: 10px; font: 600 13px ui-monospace, Consolas, monospace; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 16px; cursor: pointer; }
+  .offline { position: fixed; inset: auto 16px 16px auto; background: var(--hot); color: #fff; padding: 8px 14px;
+    border-radius: 8px; font-weight: 600; display: none; }
+  @media (max-width: 980px) {
+    main { grid-template-columns: 1fr; padding: 16px; }
+    header { padding: 12px 16px; flex-wrap: wrap; }
+    .show { padding: 16px; }
   }
-  @media (max-width: 560px) {
-    .top { grid-template-columns: 1fr; }
-    .face { margin: 0 auto; }
-    .bubble::before { display: none; }
+  @media (max-width: 640px) {
+    .feeds { grid-template-columns: 1fr; }
+    .big .value { font-size: 44px; }
+    .says p { font-size: 26px; }
+    .count { font-size: 110px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -126,99 +101,121 @@
 </style>
 </head>
 <body>
-<header class="top">
-  <div class="face" id="face" aria-hidden="true">
-    <svg viewBox="0 0 148 128">
-      <rect x="6" y="6" width="136" height="104" rx="42" fill="#322862"/>
-      <rect x="14" y="14" width="120" height="88" rx="36" fill="#241C4A"/>
-      <g class="eye" id="eyeL"><circle class="eye-white" cx="48" cy="50" r="19"/><circle class="pupil" id="pupilL" cx="48" cy="50" r="8.5"/><rect class="lid" x="28" y="30" width="40" height="40" rx="20"/></g>
-      <g class="eye" id="eyeR"><circle class="eye-white" cx="100" cy="50" r="19"/><circle class="pupil" id="pupilR" cx="100" cy="50" r="8.5"/><rect class="lid" x="80" y="30" width="40" height="40" rx="20"/></g>
-      <path d="M52 80 Q74 70 96 80 Q74 90 52 80 Z" fill="#FFC83D"/>
-      <path class="beak-low" d="M58 83 Q74 96 90 83 Q74 88 58 83 Z" fill="#E0A82A"/>
-    </svg>
-  </div>
-  <div>
-    <div class="bubble"><p id="say" class="idle">Hi! I'm Jero. Come say hello.</p></div>
-    <div class="status-line">
-      <span class="live"><span class="dot" id="dot"></span><span id="liveText">Connecting to Jero…</span></span>
-      <span class="mode" id="mode">Standing by</span>
-      <span id="camera"></span>
-    </div>
-  </div>
+<header>
+  <div class="brand"><b>JERO</b> · VISION</div>
+  <span class="live"><span class="dot" id="dot"></span><span id="liveText">connecting…</span></span>
+  <span class="mode" id="mode">standby</span>
+  <nav class="tabs" aria-label="Views">
+    <a href="#vision" id="tabVision">Vision</a>
+    <a href="#show" id="tabShow">Show</a>
+  </nav>
+  <span class="spacer"></span>
+  <span class="meta" id="camera">—</span>
 </header>
-
-<main>
-  <section class="feed" id="feed" aria-label="What Jero sees">
-    <img data-stream="/color.mjpg" alt="Live colour camera with the nearest object boxed">
-    <div class="ribbon" id="ribbon" role="status" aria-live="polite"></div>
-    <div class="count" id="count" aria-hidden="true"></div>
+<main id="vision">
+  <section class="feeds">
+    <div class="card feed" id="feed">
+      <h2><span>What Jero sees</span><span id="fps">— fps</span></h2>
+      <div class="shot">
+        <img data-stream="/color.mjpg" alt="Colour camera">
+      </div>
+    </div>
+    <div class="card feed">
+      <h2><span>Depth</span><span>0 – 4 m</span></h2>
+      <img data-stream="/depth.mjpg" alt="Depth heatmap">
+      <div class="legend"><span>near</span><span class="bar"></span><span>far</span></div>
+    </div>
   </section>
   <aside>
-    <div class="panel">
-      <h2>Closest to Jero</h2>
-      <div class="distance" id="dist">–<small>m</small></div>
-      <div class="where" id="where">Looking around…</div>
-      <div class="meter"><span id="meter"></span></div>
+    <div class="card big">
+      <div class="label">Nearest</div>
+      <div class="value" id="dist">—<small>m</small></div>
+      <div class="sub" id="where">looking…</div>
     </div>
-    <div class="panel grow">
-      <h2>Around Jero, seen from above</h2>
-      <canvas id="radar" width="640" height="360" aria-label="Top-down map of nearby obstacles"></canvas>
+    <div class="card">
+      <h2><span>Radar · top view</span><span>3 m</span></h2>
+      <canvas id="radar" width="660" height="400"></canvas>
     </div>
-    <div class="panel depth grow">
-      <h2>Depth: red is near, blue is far</h2>
-      <img data-stream="/depth.mjpg" alt="Depth camera heatmap">
+    <div class="card">
+      <h2><span>Status</span></h2>
+      <div class="stats">
+        <div class="stat"><div class="k">Bearing</div><div class="v" id="yaw">—</div></div>
+        <div class="stat"><div class="k">Elevation</div><div class="v" id="pitch">—</div></div>
+        <div class="stat"><div class="k">Head follow</div><div class="v" id="follow">—</div></div>
+        <div class="stat"><div class="k">Obstacles</div><div class="v" id="obs">—</div></div>
+      </div>
     </div>
   </aside>
 </main>
-
-<footer>
-  <div class="strip" id="strip" aria-label="Photos Jero took"><span class="empty">Photos Jero takes show up here.</span></div>
-  <ul class="log" id="log" aria-label="What just happened"></ul>
-</footer>
-
+<main id="show" class="show" hidden>
+  <section class="card says">
+    <h2><span>Jero says</span></h2>
+    <p id="say" class="idle">—</p>
+  </section>
+  <section class="card">
+    <h2><span>Photos</span><span id="nphotos">0</span></h2>
+    <div class="photos" id="photos"><span class="empty">photos Jero takes appear here</span></div>
+  </section>
+  <section class="card">
+    <h2><span>Log</span></h2>
+    <ul class="log" id="log"></ul>
+  </section>
+</main>
+<div class="ribbon" id="ribbon" role="status" aria-live="polite"></div>
+<div class="count" id="count" aria-hidden="true"></div>
 <div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Photo">
   <figure>
     <img id="modalImg" alt="Photo taken by Jero">
-    <figcaption id="modalCap">Got it!</figcaption>
-    <button type="button" id="modalClose">Close</button>
+    <figcaption id="modalCap"></figcaption>
+    <button type="button" id="modalClose">close</button>
   </figure>
 </div>
 <div class="flash" id="flash"></div>
-<div class="offline" id="offline">Jero's camera is offline. Retrying…</div>
-
+<div class="offline" id="offline">camera offline — retrying</div>
 <script>
 const $ = id => document.getElementById(id);
-const face = $("face"), sayEl = $("say");
-let state = null, lastOk = 0, sweep = 0, closeUntil = 0, typing = null, modalTimer = null, ribbonTimer = null;
-const MODES = { standby: "Standing by", walking: "Walking", standing: "Standing still", following: "Following you",
-                dancing: "Dancing", talking: "Talking", photo: "Taking a photo", sleeping: "Resting" };
+const canvas = $("radar"), ctx = canvas.getContext("2d");
+let state = null, sweep = 0, lastOk = 0, closeUntil = 0, ribbonTimer = null, modalTimer = null, nPhotos = 0;
 
-/* -- face: pupils follow the target, blink, talk ------------------------------------- */
-function lookAt(yaw, pitch) {
-  const dx = Math.max(-1, Math.min(1, -yaw / 0.6)) * 7, dy = Math.max(-1, Math.min(1, -pitch / 0.5)) * 6;
-  for (const p of [$("pupilL"), $("pupilR")]) p.style.transform = `translate(${dx}px, ${dy}px)`;
-}
-function blink() {
-  face.classList.add("blink");
-  setTimeout(() => face.classList.remove("blink"), 130);
-  setTimeout(blink, 2500 + Math.random() * 3500);
-}
-setTimeout(blink, 2000);
+function distColor(d) { return d < 0.5 ? "var(--hot)" : d < 1.0 ? "var(--warm)" : "var(--accent)"; }
 
-function speak(text) {
-  clearInterval(typing);
-  sayEl.classList.remove("idle");
-  sayEl.textContent = "";
-  let i = 0;
-  face.classList.add("talk");
-  typing = setInterval(() => {
-    sayEl.textContent = text.slice(0, ++i);
-    face.classList.toggle("talk", i % 2 === 0 && i < text.length);
-    if (i >= text.length) { clearInterval(typing); face.classList.remove("talk"); }
-  }, 38);
+async function poll() {
+  try {
+    const r = await fetch("/status.json", { cache: "no-store" });
+    state = await r.json();
+    lastOk = performance.now();
+    $("camera").textContent = `${state.camera} · ${state.size[0]}×${state.size[1]}`;
+    $("fps").textContent = `${state.fps.toFixed(1)} fps`;
+    if (state.mode && $("mode").dataset.set !== "1") $("mode").textContent = state.mode;
+    if (state.say && $("say").classList.contains("idle")) { $("say").classList.remove("idle"); $("say").textContent = state.say; }
+    const t = state.target;
+    if (t) {
+      $("dist").innerHTML = `${t.distance.toFixed(2)}<small>m</small>`;
+      $("dist").style.color = distColor(t.distance);
+      const side = Math.abs(t.yaw_deg) < 5 ? "straight ahead" : `${Math.abs(t.yaw_deg).toFixed(0)}° ${t.yaw_deg > 0 ? "left" : "right"}`;
+      $("where").textContent = t.distance < 0.5 ? `very close! ${side}` : side;
+      $("yaw").textContent = `${t.yaw_deg > 0 ? "+" : ""}${t.yaw_deg.toFixed(0)}°`;
+      $("pitch").textContent = `${t.pitch_deg > 0 ? "+" : ""}${t.pitch_deg.toFixed(0)}°`;
+    } else {
+      $("dist").innerHTML = `—<small>m</small>`;
+      $("dist").style.color = "";
+      $("where").textContent = "nothing within 3 m";
+      $("yaw").textContent = $("pitch").textContent = "—";
+    }
+    $("follow").textContent = state.follow ? (state.head ? `${(state.head.head_yaw * 57.3).toFixed(0)}°` : "on") : "off";
+    $("obs").textContent = state.radar.length;
+  } catch (e) { /* offline banner below */ }
+  setTimeout(poll, 200);
 }
 
-/* -- events from the robot (show controller, voice, photo) ---------------------------- */
+/* -- show events from the robot: say, caption, mode, photo, too close ------------------- */
+function logLine(label, text = "") {
+  const li = document.createElement("li"), b = document.createElement("b");
+  b.textContent = label;
+  li.append(new Date().toLocaleTimeString([], { hour12: false }) + " ", b, text);
+  $("log").prepend(li);
+  while ($("log").children.length > 6) $("log").lastChild.remove();
+}
 function ribbon(text, style = "info", seconds = 4) {
   const r = $("ribbon");
   r.textContent = text;
@@ -226,40 +223,30 @@ function ribbon(text, style = "info", seconds = 4) {
   clearTimeout(ribbonTimer);
   ribbonTimer = setTimeout(() => r.classList.remove("show"), seconds * 1000);
 }
-function logLine(html) {
-  const li = document.createElement("li");
-  const t = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  li.innerHTML = `${t} `;
-  li.append(html);
-  $("log").prepend(li);
-  while ($("log").children.length > 6) $("log").lastChild.remove();
-}
-function bold(a, b = "") { const s = document.createElement("span"); const k = document.createElement("b"); k.textContent = a; s.append(k, b); return s; }
-
 function countdown(n) {
-  const c = $("count");
+  const c = $("count"), f = $("flash");
   const tick = k => {
-    if (k <= 0) { c.classList.remove("show"); $("flash").classList.remove("go"); void $("flash").offsetWidth; $("flash").classList.add("go"); return; }
-    c.textContent = k; c.classList.remove("show"); void c.offsetWidth; c.classList.add("show");
+    if (k <= 0) { c.classList.remove("show"); f.classList.remove("go"); void f.offsetWidth; f.classList.add("go"); return; }
+    c.textContent = k; c.classList.add("show");
     setTimeout(() => tick(k - 1), 1000);
   };
   tick(n);
 }
 function addPhoto(p, front = true) {
-  const strip = $("strip");
-  strip.querySelector(".empty")?.remove();
-  const b = document.createElement("button");
-  b.type = "button";
-  b.title = p.name;
-  const img = document.createElement("img");
-  img.src = p.url; img.alt = `Photo ${p.name}`; img.loading = "lazy";
+  const box = $("photos");
+  box.querySelector(".empty")?.remove();
+  const b = document.createElement("button"), img = document.createElement("img");
+  b.type = "button"; b.title = p.name;
+  img.src = p.url; img.alt = p.name; img.loading = "lazy";
   b.append(img);
   b.onclick = () => showPhoto(p, false);
-  front ? strip.prepend(b) : strip.append(b);
+  front ? box.prepend(b) : box.append(b);
+  while (box.children.length > 24) box.lastChild.remove();
+  $("nphotos").textContent = ++nPhotos;
 }
 function showPhoto(p, fresh) {
   $("modalImg").src = p.url;
-  $("modalCap").textContent = fresh ? "Got it! Thanks for posing." : p.name;
+  $("modalCap").textContent = `saved · ${p.name}`;
   $("modal").classList.add("show");
   $("modalClose").focus();
   clearTimeout(modalTimer);
@@ -270,115 +257,78 @@ $("modalClose").onclick = closePhoto;
 $("modal").onclick = e => { if (e.target === $("modal")) closePhoto(); };
 
 function handle(ev) {
-  if (ev.type === "say") { speak(ev.text); logLine(bold("Jero: ", ev.text)); }
-  else if (ev.type === "caption") { ribbon(ev.text, ev.style, ev.seconds); logLine(bold(ev.text)); }
-  else if (ev.type === "mode") { $("mode").textContent = MODES[ev.mode] || ev.mode; logLine(bold("Mode: ", MODES[ev.mode] || ev.mode)); }
-  else if (ev.type === "countdown") { countdown(ev.seconds); logLine(bold("Photo", ev.seconds ? ` in ${ev.seconds}…` : "")); }
-  else if (ev.type === "photo") { addPhoto(ev); showPhoto(ev, true); logLine(bold("Saved ", ev.name)); }
-  else if (ev.type === "close") {
-    closeUntil = performance.now() + 2500;
-    ribbon("Whoa, too close!", "warn", 2.5);
-    logLine(bold("Too close: ", `${ev.distance.toFixed(2)} m`));
-  }
+  if (ev.type === "say") { $("say").classList.remove("idle"); $("say").textContent = ev.text; logLine("say ", ev.text); }
+  else if (ev.type === "caption") { ribbon(ev.text, ev.style, ev.seconds); logLine("caption ", ev.text); }
+  else if (ev.type === "mode") { $("mode").textContent = ev.mode; $("mode").dataset.set = "1"; logLine("mode ", ev.mode); }
+  else if (ev.type === "countdown") { countdown(ev.seconds); logLine("photo ", ev.seconds ? `in ${ev.seconds} s` : "now"); }
+  else if (ev.type === "photo") { addPhoto(ev); showPhoto(ev, true); logLine("saved ", ev.name); }
+  else if (ev.type === "close") { closeUntil = performance.now() + 2500; ribbon("Too close!", "warn", 2.5); logLine("too close ", `${ev.distance.toFixed(2)} m`); }
 }
-function listen() {
-  const es = new EventSource("/api/events");
-  es.onmessage = m => { try { handle(JSON.parse(m.data)); } catch (e) { console.warn(e); } };
-}
-// live video starts after the page has loaded (an endless stream would otherwise keep it "loading")
-addEventListener("load", () => {
-  document.querySelectorAll("img[data-stream]").forEach(img => { img.src = img.dataset.stream; });
-  listen();
-});
-fetch("/api/photos").then(r => r.json()).then(list => list.forEach(p => addPhoto(p, false))).catch(() => {});
 
-/* -- live numbers -------------------------------------------------------------------- */
-function distColor(d) { return d < 0.5 ? "var(--coral)" : d < 1.0 ? "var(--beak)" : "var(--paper)"; }
-async function poll() {
-  try {
-    const r = await fetch("/status.json", { cache: "no-store" });
-    state = await r.json();
-    lastOk = performance.now();
-    $("camera").textContent = `${state.camera}, ${state.fps.toFixed(0)} fps`;
-    if (state.mode && MODES[state.mode] && $("mode").textContent === "Standing by") $("mode").textContent = MODES[state.mode];
-    if (state.say && sayEl.classList.contains("idle")) { sayEl.classList.remove("idle"); sayEl.textContent = state.say; }
-    const t = state.target;
-    if (t) {
-      $("dist").innerHTML = `${t.distance.toFixed(2)}<small>m</small>`;
-      $("dist").style.color = distColor(t.distance);
-      const side = Math.abs(t.yaw_deg) < 5 ? "straight ahead" : `${Math.abs(t.yaw_deg).toFixed(0)}° to the ${t.yaw_deg > 0 ? "left" : "right"}`;
-      $("where").textContent = t.distance < 0.5 ? `Very close, ${side}` : side[0].toUpperCase() + side.slice(1);
-      const m = $("meter");
-      m.style.width = `${Math.max(4, Math.min(100, (3 - t.distance) / 2.75 * 100))}%`;
-      m.style.background = distColor(t.distance);
-      lookAt(t.yaw, t.pitch);
-    } else {
-      $("dist").innerHTML = `–<small>m</small>`;
-      $("dist").style.color = "";
-      $("where").textContent = "Nothing within 3 m";
-      $("meter").style.width = "0";
-      lookAt(0, 0);
-    }
-  } catch (e) { /* offline banner below */ }
-  setTimeout(poll, 200);
-}
-poll();
-
-/* -- radar + liveness ---------------------------------------------------------------- */
-const canvas = $("radar"), ctx = canvas.getContext("2d");
-const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 function drawRadar() {
-  const W = canvas.width, H = canvas.height, ox = W / 2, oy = H - 22, R = H - 40, maxM = 3, fov = 0.75;
-  const line = css("--ink-3"), lilac = css("--lilac"), beak = css("--beak"), coral = css("--coral"), paper = css("--paper");
+  const W = canvas.width, H = canvas.height, ox = W / 2, oy = H - 24, R = H - 44, maxM = 3;
   ctx.clearRect(0, 0, W, H);
-  ctx.lineWidth = 2;
-  ctx.font = "600 20px Atkinson Hyperlegible, system-ui, sans-serif";
+  const css = getComputedStyle(document.documentElement);
+  const line = css.getPropertyValue("--line"), dim = css.getPropertyValue("--dim"), acc = css.getPropertyValue("--accent");
+  ctx.lineWidth = 1.5;
   for (let m = 1; m <= maxM; m++) {
     ctx.strokeStyle = line; ctx.beginPath(); ctx.arc(ox, oy, R * m / maxM, Math.PI, 2 * Math.PI); ctx.stroke();
-    ctx.fillStyle = lilac; ctx.fillText(`${m} m`, ox + 8, oy - R * m / maxM + 22);
+    ctx.fillStyle = dim; ctx.font = "20px ui-monospace, Consolas, monospace"; ctx.fillText(`${m} m`, ox + 6, oy - R * m / maxM + 22);
   }
+  const fov = 0.75;  // ~43° each side
   ctx.strokeStyle = line;
   for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox + s * Math.sin(fov) * R, oy - Math.cos(fov) * R); ctx.stroke(); }
-  if (!reduced) {
-    sweep = (sweep + 0.018) % (2 * fov);
-    const a = -fov + sweep;
-    ctx.strokeStyle = "rgba(255,200,61,.45)"; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox + Math.sin(a) * R, oy - Math.cos(a) * R); ctx.stroke();
-  }
+  sweep = (sweep + 0.02) % (2 * fov);
+  const a = -fov + sweep;
+  const g = ctx.createLinearGradient(ox, oy, ox + Math.sin(a) * R, oy - Math.cos(a) * R);
+  g.addColorStop(0, "rgba(40,220,255,0)"); g.addColorStop(1, "rgba(40,220,255,.55)");
+  ctx.strokeStyle = g; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ox + Math.sin(a) * R, oy - Math.cos(a) * R); ctx.stroke();
   if (state) {
     for (const [x, z] of state.radar) {
       if (z > maxM) continue;
-      ctx.fillStyle = z < 0.5 ? coral : z < 1 ? beak : paper;
-      ctx.globalAlpha = .85;
+      ctx.fillStyle = z < 0.5 ? "#ff5a5f" : z < 1 ? "#ffb547" : acc;
       ctx.beginPath(); ctx.arc(ox + x / maxM * R, oy - z / maxM * R, 6, 0, 2 * Math.PI); ctx.fill();
-      ctx.globalAlpha = 1;
     }
     const t = state.target;
     if (t && t.distance <= maxM) {
       const x = ox - Math.sin(t.yaw) * t.distance / maxM * R, y = oy - Math.cos(t.yaw) * t.distance / maxM * R;
-      ctx.strokeStyle = beak; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y, 17, 0, 2 * Math.PI); ctx.stroke();
+      ctx.strokeStyle = "#28dcff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 16, 0, 2 * Math.PI); ctx.stroke();
     }
   }
-  ctx.fillStyle = beak; ctx.beginPath(); ctx.moveTo(ox, oy - 14); ctx.lineTo(ox - 11, oy + 6); ctx.lineTo(ox + 11, oy + 6); ctx.fill();
-
-  const now = performance.now(), live = now - lastOk < 1500, close = now < closeUntil;
+  ctx.fillStyle = acc; ctx.beginPath(); ctx.moveTo(ox, oy - 14); ctx.lineTo(ox - 10, oy + 6); ctx.lineTo(ox + 10, oy + 6); ctx.fill();
+  const live = performance.now() - lastOk < 1500;
   $("dot").classList.toggle("on", live);
-  $("liveText").textContent = live ? "Live" : "Connecting to Jero…";
+  $("liveText").textContent = live ? "live" : "offline";
   $("offline").style.display = live || !lastOk ? "none" : "block";
-  $("feed").classList.toggle("close", close);
-  face.classList.toggle("wide", close);
+  $("feed").classList.toggle("close", performance.now() < closeUntil);
   requestAnimationFrame(drawRadar);
 }
-drawRadar();
 
-/* -- F: full screen (projector) ------------------------------------------------------ */
+// live video and events start after the page has loaded (an endless stream would keep it "loading")
+addEventListener("load", () => {
+  document.querySelectorAll("img[data-stream]").forEach(img => { img.src = img.dataset.stream; });
+  const es = new EventSource("/api/events");
+  es.onmessage = m => { try { handle(JSON.parse(m.data)); } catch (e) { console.warn(e); } };
+});
+fetch("/api/photos").then(r => r.json()).then(list => list.forEach(p => addPhoto(p, false))).catch(() => {});
+function route() {
+  const show = location.hash === "#show";
+  $("vision").hidden = show;
+  $("show").hidden = !show;
+  $("tabVision").toggleAttribute("aria-current", !show);
+  $("tabShow").toggleAttribute("aria-current", show);
+  if (!show) $("tabVision").setAttribute("aria-current", "page"); else $("tabShow").setAttribute("aria-current", "page");
+}
+addEventListener("hashchange", route);
+route();
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") closePhoto();
   if (e.key.toLowerCase() === "f" && !e.ctrlKey && !e.metaKey) {
     document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.();
   }
 });
+poll();
+drawRadar();
 </script>
 </body>
 </html>
